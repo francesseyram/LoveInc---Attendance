@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helpers ────────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ─── Members ─────────────────────────────────────────────────
+    // Public read & write allowed for the check-in self-registration flow.
+    // Authenticated users can also read/write for admin features.
+    match /members/{memberId} {
+      allow read:  if true;
+      allow create: if true;   // allow public self-registration via check-in
+      allow update: if isAuthenticated();  // only admins can update roles etc.
+      allow delete: if isAuthenticated();
+    }
+
+    // ─── Attendance ──────────────────────────────────────────────
+    // Public check-in writes are allowed. Reads open to support
+    // live count display on the public check-in page.
+    match /attendance/{attendanceId} {
+      allow read:   if true;
+      allow create: if true;   // public check-in
+      allow update, delete: if isAuthenticated();
+    }
+
+    // ─── Services ────────────────────────────────────────────────
+    // Services are readable by anyone (needed for check-in page to
+    // show service name/date without auth). Writes restricted to
+    // authenticated users only.
+    match /services/{serviceId} {
+      allow read:              if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+  }
+}
