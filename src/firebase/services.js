@@ -5,6 +5,7 @@ import {
   getDocs,
   getDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -15,26 +16,27 @@ import { db } from './config'
 
 const SERVICES = 'services'
 
-/** Create a new service and set it as the active one. Returns the new service ID. */
+/**
+ * Create a new service and set it as the active one.
+ * Returns the new service ID.
+ */
 export async function createService(data, createdByUid) {
   const batch = writeBatch(db)
 
-  // Deactivate all existing services
+  // Deactivate all existing active services
   const activeSnap = await getDocs(query(collection(db, SERVICES), where('isActive', '==', true)))
   activeSnap.docs.forEach(d => batch.update(d.ref, { isActive: false }))
-
-  // Commit deactivations first
   await batch.commit()
 
-  // Add new service doc
   const ref = await addDoc(collection(db, SERVICES), {
-    name:      data.name.trim(),
-    date:      data.date,
-    time:      data.time,
-    type:      data.type,
-    isActive:  true,
-    createdAt: serverTimestamp(),
-    createdBy: createdByUid || '',
+    name:        data.name.trim(),
+    date:        data.date,
+    time:        data.time,
+    type:        data.type,
+    isActive:    true,
+    isCompleted: false,
+    createdAt:   serverTimestamp(),
+    createdBy:   createdByUid || '',
   })
 
   return ref.id
@@ -52,8 +54,7 @@ export async function getActiveService() {
   const q = query(collection(db, SERVICES), where('isActive', '==', true))
   const snap = await getDocs(q)
   if (snap.empty) return null
-  const d = snap.docs[0]
-  return { id: d.id, ...d.data() }
+  return { id: snap.docs[0].id, ...snap.docs[0].data() }
 }
 
 /** Get a service by ID. */
@@ -65,10 +66,33 @@ export async function getServiceById(serviceId) {
 
 /** Set a specific service as active (deactivates all others). */
 export async function setActiveService(serviceId) {
-  const batch = writeBatch(db)
+  const batch   = writeBatch(db)
   const allSnap = await getDocs(collection(db, SERVICES))
   allSnap.docs.forEach(d => {
     batch.update(d.ref, { isActive: d.id === serviceId })
   })
   await batch.commit()
+}
+
+/**
+ * Mark a service as completed.
+ * Sets isActive → false, isCompleted → true.
+ * No one can check in to a completed service.
+ */
+export async function completeService(serviceId) {
+  await updateDoc(doc(db, SERVICES, serviceId), {
+    isActive:    false,
+    isCompleted: true,
+    completedAt: serverTimestamp(),
+  })
+}
+
+/**
+ * Permanently delete a service document.
+ * Firestore attendance records referencing this service are kept (orphaned) —
+ * delete them separately if needed.
+ * Only superadmins should be able to trigger this from the UI.
+ */
+export async function deleteService(serviceId) {
+  await deleteDoc(doc(db, SERVICES, serviceId))
 }

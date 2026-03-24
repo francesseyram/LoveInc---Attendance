@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { formatStudentIdForDisplay } from '../firebase/members'
 
 const ROLE_BADGE = {
   superadmin: 'badge-purple',
@@ -108,7 +109,7 @@ export default function MemberTable({ members = [], loading = false }) {
                       </div>
                     </div>
                   </td>
-                  <td className="font-mono text-xs text-brand-muted">{m.studentId || '—'}</td>
+                  <td className="font-mono text-xs text-brand-muted">{formatStudentIdForDisplay(m.studentId)}</td>
                   <td>
                     <span className={ROLE_BADGE[m.role] || ROLE_BADGE.member}>
                       {m.role || 'member'}

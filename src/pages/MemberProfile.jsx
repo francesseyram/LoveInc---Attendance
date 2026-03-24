@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
-import { getMemberById, updateMemberRole } from '../firebase/members'
+import { useAuth } from '../App'
+import {
+  getMemberById,
+  updateMemberRole,
+  formatStudentIdForDisplay,
+  validateRoleAssignment,
+  ROLES_ASSIGNABLE_BY_ADMIN,
+  ROLES_ASSIGNABLE_BY_SUPERADMIN,
+} from '../firebase/members'
 import { getAttendanceForMember }           from '../firebase/attendance'
 import { getServiceById }                   from '../firebase/services'
 
-const ROLES = ['member', 'leader', 'admin', 'superadmin']
+function roleOptionLabel(r) {
+  if (r === 'superadmin') return 'Super Admin'
+  return r.charAt(0).toUpperCase() + r.slice(1)
+}
 
 const ROLE_BADGE = {
   superadmin: 'badge-purple',
@@ -29,6 +40,7 @@ function formatDateTime(ts) {
 export default function MemberProfile() {
   const { id }   = useParams()
   const navigate = useNavigate()
+  const { memberRole } = useAuth()
 
   const [member,    setMember]    = useState(null)
   const [history,   setHistory]   = useState([])  // { attendance, service }[]
@@ -37,6 +49,7 @@ export default function MemberProfile() {
   const [newRole,   setNewRole]   = useState('')
   const [roleSaved, setRoleSaved] = useState(false)
   const [error,     setError]     = useState('')
+  const [roleError, setRoleError] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -50,6 +63,7 @@ export default function MemberProfile() {
         if (!m) { setError('Member not found.'); setLoading(false); return }
         setMember(m)
         setNewRole(m.role)
+        setRoleError('')
 
         // Fetch service details for each attendance record
         const withServices = await Promise.all(
@@ -71,6 +85,12 @@ export default function MemberProfile() {
 
   const handleRoleUpdate = async () => {
     if (!member || newRole === member.role) return
+    setRoleError('')
+    const denied = validateRoleAssignment(memberRole, member.role, newRole)
+    if (denied) {
+      setRoleError(denied)
+      return
+    }
     setSaving(true)
     try {
       await updateMemberRole(id, newRole)
@@ -79,10 +99,30 @@ export default function MemberProfile() {
       setTimeout(() => setRoleSaved(false), 2500)
     } catch (err) {
       console.error(err)
+      setRoleError('Could not save role. Try again.')
     } finally {
       setSaving(false)
     }
   }
+
+  // Super Admins can change anyone; regular Admins only Member ↔ Leader for non-Admin accounts (Leaders cannot assign roles)
+  const actorCanManageRoles = memberRole === 'superadmin' || memberRole === 'admin'
+  const canEditThisMemberRole =
+    actorCanManageRoles &&
+    (memberRole === 'superadmin' || (member && ['member', 'leader'].includes(member.role)))
+  const assignableRoles =
+    memberRole === 'superadmin' ? ROLES_ASSIGNABLE_BY_SUPERADMIN : ROLES_ASSIGNABLE_BY_ADMIN
+
+  // Keep selected role valid if permissions / member change
+  useEffect(() => {
+    if (!member) return
+    const editable =
+      (memberRole === 'superadmin' || memberRole === 'admin') &&
+      (memberRole === 'superadmin' || ['member', 'leader'].includes(member.role))
+    if (!editable) return
+    const allowed = memberRole === 'superadmin' ? ROLES_ASSIGNABLE_BY_SUPERADMIN : ROLES_ASSIGNABLE_BY_ADMIN
+    if (!allowed.includes(newRole)) setNewRole(member.role)
+  }, [member, memberRole, newRole])
 
   const attendanceRate = history.length > 0
     ? `${Math.round((history.length / Math.max(history.length, 1)) * 100)}%`
@@ -132,10 +172,15 @@ export default function MemberProfile() {
                   </span>
                 </div>
                 <p className="text-brand-muted text-sm mt-1">
-                  Student ID: <span className="font-mono text-brand-text">{member.studentId || '—'}</span>
+                  Student ID: <span className="font-mono text-brand-text">{formatStudentIdForDisplay(member.studentId)}</span>
                 </p>
                 <p className="text-brand-subtle text-xs mt-0.5">
-                  Joined {formatDate(member.joinedDate)} · via {member.createdBy === 'admin' ? 'Admin' : 'Check-In'}
+                  Joined {formatDate(member.joinedDate)} · via{' '}
+                  {member.createdBy === 'auth_sync'
+                    ? 'Login sync'
+                    : member.createdBy === 'admin'
+                      ? 'Admin'
+                      : 'Check-In'}
                 </p>
               </div>
             </div>
@@ -152,7 +197,7 @@ export default function MemberProfile() {
                       { label: 'Email',    value: member.email    || '—' },
                       { label: 'Phone',    value: member.phone    || '—' },
                       { label: 'Birthday', value: member.birthday ? new Date(member.birthday).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }) : '—' },
-                      { label: 'Student ID', value: member.studentId || '—' },
+                      { label: 'Student ID', value: formatStudentIdForDisplay(member.studentId) },
                     ].map(({ label, value }) => (
                       <div key={label}>
                         <dt className="label mb-1">{label}</dt>
@@ -206,26 +251,59 @@ export default function MemberProfile() {
                 {/* Role management */}
                 <div className="card">
                   <h3 className="font-display text-lg font-semibold text-brand-text mb-4">Role Management</h3>
-                  <label className="label">Member Role</label>
-                  <select
-                    className="input mb-3"
-                    value={newRole}
-                    onChange={e => setNewRole(e.target.value)}
-                  >
-                    {ROLES.map(r => (
-                      <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={handleRoleUpdate}
-                    disabled={saving || newRole === member.role}
-                    className="btn-gold w-full text-sm py-2"
-                  >
-                    {saving ? 'Saving…' : roleSaved ? '✓ Saved!' : 'Update Role'}
-                  </button>
-                  <p className="text-brand-subtle text-xs mt-2 text-center">
-                    Only admins and above can update roles.
-                  </p>
+
+                  {!actorCanManageRoles ? (
+                    <p className="text-brand-muted text-sm">
+                      Your account doesn&apos;t have permission to change roles.
+                    </p>
+                  ) : !canEditThisMemberRole ? (
+                    <>
+                      <label className="label">Member Role</label>
+                      <div className="mt-1">
+                        <span className={ROLE_BADGE[member.role] || ROLE_BADGE.member}>
+                          {member.role}
+                        </span>
+                      </div>
+                      <p className="text-brand-subtle text-xs mt-3">
+                        Only <strong className="text-brand-muted">Super Admins</strong> can change roles for Admin
+                        or Super Admin accounts.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <label className="label">Member Role</label>
+                      <select
+                        className="input mb-3"
+                        value={assignableRoles.includes(newRole) ? newRole : assignableRoles[0]}
+                        onChange={e => {
+                          setNewRole(e.target.value)
+                          setRoleError('')
+                        }}
+                      >
+                        {assignableRoles.map(r => (
+                          <option key={r} value={r}>{roleOptionLabel(r)}</option>
+                        ))}
+                      </select>
+                      {roleError && (
+                        <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-3 py-2 mb-3">
+                          {roleError}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleRoleUpdate}
+                        disabled={saving || newRole === member.role}
+                        className="btn-gold w-full text-sm py-2"
+                      >
+                        {saving ? 'Saving…' : roleSaved ? '✓ Saved!' : 'Update Role'}
+                      </button>
+                      <p className="text-brand-subtle text-xs mt-2 text-center">
+                        {memberRole === 'superadmin'
+                          ? 'You can assign any role, including Admin and Super Admin.'
+                          : 'You can assign Member or Leader only. Super Admins set Admin roles.'}
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

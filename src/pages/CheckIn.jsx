@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getServiceById } from '../firebase/services'
 import { getMemberByStudentId, createMember, studentIdExists } from '../firebase/members'
-import { checkIn, hasCheckedIn, subscribeToServiceAttendance } from '../firebase/attendance'
+import { checkIn, hasCheckedIn } from '../firebase/attendance'
+import { useTheme } from '../App'
 
 // ─── Sub-components ──────────────────────────────────────────
 function Spinner() {
@@ -13,11 +14,46 @@ function Spinner() {
   )
 }
 
+function SunIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <circle cx="12" cy="12" r="5" />
+      <path strokeLinecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+    </svg>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+    </svg>
+  )
+}
+
+function FloatingThemeToggle() {
+  const { theme, toggleTheme } = useTheme()
+  const isLight = theme === 'light'
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="fixed top-4 right-4 z-50 w-11 h-11 rounded-full flex items-center justify-center shadow-lg border border-brand-border bg-surface-elevated text-brand-muted hover:text-gold hover:border-gold/40 transition-all duration-200"
+      aria-label={isLight ? 'Switch to dark mode' : 'Switch to light mode'}
+      title={isLight ? 'Dark mode' : 'Light mode'}
+    >
+      {isLight ? <MoonIcon /> : <SunIcon />}
+    </button>
+  )
+}
+
 function Logo() {
+  const { theme } = useTheme()
+  const isLight = theme === 'light'
   return (
     <div className="flex flex-col items-center gap-3 mb-8">
       <img
-        src="/global_white_png.png"
+        src={isLight ? '/global_black.png' : '/global_white_png.png'}
         alt="Love Inc Global"
         className="h-20 w-auto object-contain"
         onError={(e) => { e.target.style.display = 'none' }}
@@ -38,21 +74,16 @@ export default function CheckIn() {
   const [service,      setService]      = useState(null)
   const [pageLoading,  setPageLoading]  = useState(true)
   const [notFound,     setNotFound]     = useState(false)
-  const [count,        setCount]        = useState(0)
   const [step,         setStep]         = useState('choose') // 'choose' | 'first' | 'returning' | 'success'
   const [successData,  setSuccessData]  = useState(null)
   const [error,        setError]        = useState('')
   const [submitting,   setSubmitting]   = useState(false)
 
-  // First-timer form state
   const [firstForm, setFirstForm] = useState({
     firstName: '', lastName: '', studentId: '', phone: '', email: '', birthday: '',
   })
-
-  // Returning member state
   const [studentIdInput, setStudentIdInput] = useState('')
 
-  // Load service
   useEffect(() => {
     if (!serviceId) {
       setNotFound(true)
@@ -68,17 +99,6 @@ export default function CheckIn() {
       .finally(() => setPageLoading(false))
   }, [serviceId])
 
-  // Real-time check-in count
-  useEffect(() => {
-    if (!serviceId) return
-    const unsub = subscribeToServiceAttendance(serviceId, (records) => {
-      setCount(records.length)
-    })
-    return unsub
-  }, [serviceId])
-
-  // ─── Handlers ─────────────────────────────────────────────
-
   const setFF = (field) => (e) => setFirstForm(p => ({ ...p, [field]: e.target.value }))
 
   const handleFirstTimerSubmit = async (e) => {
@@ -92,7 +112,6 @@ export default function CheckIn() {
 
     setSubmitting(true)
     try {
-      // Check if student ID already exists
       const exists = await studentIdExists(studentId.trim())
       if (exists) {
         setError('This Student ID is already registered. Please use "Been here before?" to check in.')
@@ -100,7 +119,6 @@ export default function CheckIn() {
         return
       }
 
-      // Check for duplicate check-in (by student ID lookup)
       const existing = await getMemberByStudentId(studentId.trim())
       if (existing) {
         const dup = await hasCheckedIn(existing.id, serviceId)
@@ -111,10 +129,7 @@ export default function CheckIn() {
         }
       }
 
-      // Create member
       const memberId = await createMember({ ...firstForm, createdBy: 'self' })
-
-      // Check in
       await checkIn(memberId, serviceId, true)
 
       setSuccessData({
@@ -175,7 +190,8 @@ export default function CheckIn() {
 
   if (pageLoading) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center">
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center relative">
+        <FloatingThemeToggle />
         <Spinner />
       </div>
     )
@@ -183,7 +199,8 @@ export default function CheckIn() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6">
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6 relative">
+        <FloatingThemeToggle />
         <div className="text-center max-w-sm animate-fade-in">
           <Logo />
           <div className="card mt-4">
@@ -199,13 +216,31 @@ export default function CheckIn() {
     )
   }
 
-  // ─── Success ──────────────────────────────────────────────
-  if (step === 'success') {
+  // Service ended (completed) — block check-in
+  if (service?.isCompleted) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6">
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6 relative">
+        <FloatingThemeToggle />
+        <div className="w-full max-w-sm text-center animate-fade-in">
+          <Logo />
+          <div className="card mt-4 border-brand-border">
+            <p className="text-4xl mb-3">✓</p>
+            <h2 className="font-display text-2xl text-brand-text mb-2">This service has ended</h2>
+            <p className="text-brand-muted text-sm">
+              Check-in is closed for <span className="text-brand-text font-medium">{service.name}</span>.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (step === 'success' && successData) {
+    return (
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6 relative">
+        <FloatingThemeToggle />
         <div className="w-full max-w-sm text-center animate-slide-up">
           <Logo />
-
           <div className="card border-gold/30 bg-gold/5 shadow-gold">
             <div className="text-5xl mb-4">{successData.isNew ? '🎉' : '✅'}</div>
             <h2 className="font-display text-3xl font-semibold text-gold mb-2">
@@ -218,20 +253,7 @@ export default function CheckIn() {
                 : `Welcome back! Checked in at ${successData.time}`
               }
             </p>
-
-            <div className="gold-divider mb-4" />
-
-            <div className="flex items-center justify-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-              </span>
-              <span className="text-brand-muted text-sm">
-                <span className="text-gold font-semibold">{count}</span> people in service
-              </span>
-            </div>
           </div>
-
           <p className="text-brand-subtle text-xs mt-6">
             Love Inc Global · {service?.name}
           </p>
@@ -240,16 +262,14 @@ export default function CheckIn() {
     )
   }
 
-  // ─── Main check-in UI ─────────────────────────────────────
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6">
+    <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6 relative">
+      <FloatingThemeToggle />
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="animate-fade-in">
           <Logo />
         </div>
 
-        {/* Service info card */}
         <div className="card mb-6 text-center animate-slide-up delay-100">
           <p className="text-brand-subtle text-xs uppercase tracking-widest mb-1">{service?.type}</p>
           <h2 className="font-display text-2xl font-semibold text-brand-text">{service?.name}</h2>
@@ -257,38 +277,28 @@ export default function CheckIn() {
             {service?.date}
             {service?.time && ` · ${service.time}`}
           </p>
-          <div className="gold-divider my-4" />
-          <div className="flex items-center justify-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-            </span>
-            <span className="text-brand-muted text-sm">
-              <span className="text-gold font-semibold font-display text-lg">{count}</span> {count === 1 ? 'person' : 'people'} checked in
-            </span>
-          </div>
         </div>
 
-        {/* ── Step: Choose ── */}
         {step === 'choose' && (
           <div className="space-y-3 animate-slide-up delay-200">
             <p className="text-center text-brand-muted text-sm mb-4">Is this your first time at Love Inc?</p>
             <button
+              type="button"
               onClick={() => { setStep('first'); setError('') }}
               className="w-full btn-gold py-4 text-base"
             >
-              🎉 First time here!
+              First time here!
             </button>
             <button
+              type="button"
               onClick={() => { setStep('returning'); setError('') }}
               className="w-full btn-ghost py-4 text-base"
             >
-              👋 Been here before
+              Been here before
             </button>
           </div>
         )}
 
-        {/* ── Step: First Timer ── */}
         {step === 'first' && (
           <div className="card animate-slide-up">
             <h3 className="font-display text-xl font-semibold text-brand-text mb-1">Welcome!</h3>
@@ -343,7 +353,6 @@ export default function CheckIn() {
           </div>
         )}
 
-        {/* ── Step: Returning Member ── */}
         {step === 'returning' && (
           <div className="card animate-slide-up">
             <h3 className="font-display text-xl font-semibold text-brand-text mb-1">Welcome back!</h3>
@@ -384,6 +393,7 @@ export default function CheckIn() {
             <p className="text-center text-brand-subtle text-xs mt-4">
               First time?{' '}
               <button
+                type="button"
                 onClick={() => { setStep('first'); setError('') }}
                 className="text-gold hover:text-gold-light transition-colors"
               >

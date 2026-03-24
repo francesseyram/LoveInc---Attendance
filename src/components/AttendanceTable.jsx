@@ -14,6 +14,7 @@ function formatTime(ts) {
 }
 
 /**
+ * 
  * Props:
  *   records   - array of attendance objects (already joined with member data)
  *               each: { id, memberId, firstName, lastName, studentId, role, checkedInAt, isNew }

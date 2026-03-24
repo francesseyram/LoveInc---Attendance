@@ -11,6 +11,8 @@ A full-stack web application for Love Inc Global (Christian fellowship at Ashesi
 npm install
 ```
 
+**If `npm install` feels very slow**, this repo includes an `.npmrc` that turns off audit/funding and prefers the local cache. You can also run `npm run install:fast`. For a clean install from the lockfile: `rm -rf node_modules && npm run install:ci`. To profile: `npm install --timing`.
+
 ### 2. Configure Firebase
 1. Copy `.env.example` to `.env`:
    ```bash
@@ -22,6 +24,7 @@ npm install
 - Enable **Firestore Database** in your Firebase console
 - Enable **Email/Password Authentication**
 - Create admin user accounts manually in Firebase Console → Authentication → Users
+- **Auth ↔ Members:** When an admin signs in, if no `members` document exists for their email, the app **creates one automatically** (role `admin`, synthetic student id `auth-{uid}`) so they appear under **Members** and superadmin features can resolve roles. Promote to **Super Admin** from **Members → profile** as needed.
 - Deploy Firestore rules:
   ```bash
   firebase deploy --only firestore:rules
@@ -77,7 +80,9 @@ src/
 | `member`     | Regular attendee                               |
 | `leader`     | Cell/small group leader                        |
 | `admin`      | Full dashboard access                          |
-| `superadmin` | Admin + promote/demote roles, delete services  |
+| `superadmin` | Admin + assign any role, delete services       |
+
+**Role assignment (Members → profile):** **Super Admins** can set any role for any account. **Admins** can only set **`member`** or **`leader`**, and only for people who are already **Member** or **Leader**. **Leaders** cannot assign roles from the UI.
 
 ---
 

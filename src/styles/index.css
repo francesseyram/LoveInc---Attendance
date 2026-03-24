@@ -2,160 +2,263 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Base ───────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────
+   THEME VARIABLES
+   Space-separated RGB channels so Tailwind opacity modifiers work:
+   e.g.  bg-gold/10  →  background-color: rgb(var(--accent) / 0.1)
+   ───────────────────────────────────────────────────────────────── */
+
+/* Dark theme — default */
 :root {
-  --gold: #C9A84C;
-  --gold-light: #E4C47A;
-  --gold-dark: #A8893A;
-  --bg: #0A0A0A;
-  --surface: #111111;
-  --surface-elevated: #1A1A1A;
-  --border: #2A2A2A;
-  --text: #F5F5F5;
-  --text-muted: #9CA3AF;
+  --accent:       201 168 76;    /* #C9A84C  gold   */
+  --accent-light: 228 196 122;   /* #E4C47A         */
+  --accent-dark:  168 137 58;    /* #A8893A         */
+  --accent-muted: 125 104 48;    /* #7D6830         */
+
+  --bg:         10 10 10;        /* #0A0A0A  body   */
+  --surface:    17 17 17;        /* #111111  cards  */
+  --surface-el: 26 26 26;        /* #1A1A1A  elevated */
+  --surface-hv: 34 34 34;        /* #222222  hover  */
+  --border:     42 42 42;        /* #2A2A2A         */
+
+  --text:        245 245 245;    /* #F5F5F5         */
+  --text-muted:  156 163 175;    /* #9CA3AF         */
+  --text-subtle: 107 114 128;    /* #6B7280         */
+
+  --shadow-accent:    0 0 24px rgba(201,168,76,0.18);
+  --shadow-accent-sm: 0 0 12px rgba(201,168,76,0.10);
+
+  /* Non-variable values used in plain CSS */
+  --btn-text: #000000;
+  --gradient-btn: linear-gradient(135deg, #b8922a 0%, #C9A84C 50%, #e0b96a 100%);
+  --gradient-page: none;
+  --gradient-card-top: linear-gradient(180deg, rgba(201,168,76,0.06) 0%, transparent 100%);
+  --gradient-hero: linear-gradient(135deg, rgba(201,168,76,0.12) 0%, transparent 60%);
 }
 
-* {
-  box-sizing: border-box;
+/* Light theme */
+.light-theme {
+  --accent:       124 58 237;    /* #7C3AED  purple */
+  --accent-light: 167 139 250;   /* #A78BFA         */
+  --accent-dark:  91 33 182;     /* #5B21B6         */
+  --accent-muted: 196 181 253;   /* #C4B5FD         */
+
+  --bg:         255 255 255;     /* #FFFFFF         */
+  --surface:    250 247 255;     /* #FAF7FF  tinted white */
+  --surface-el: 243 237 255;     /* #F3EDFF         */
+  --surface-hv: 246 242 255;     /* #F6F2FF         */
+  --border:     221 214 254;     /* #DDD6FE  violet */
+
+  --text:        28 25 23;       /* #1C1917  near-black */
+  --text-muted:  107 114 128;    /* #6B7280         */
+  --text-subtle: 156 163 175;    /* #9CA3AF         */
+
+  --shadow-accent:    0 0 24px rgba(124,58,237,0.22);
+  --shadow-accent-sm: 0 0 12px rgba(124,58,237,0.14);
+
+  --btn-text: #ffffff;
+  --gradient-btn: linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #A855F7 100%);
+  --gradient-page: linear-gradient(135deg, #fdfcff 0%, #f3eeff 50%, #faf5ff 100%);
+  --gradient-card-top: linear-gradient(180deg, rgba(124,58,237,0.06) 0%, transparent 100%);
+  --gradient-hero: linear-gradient(135deg, rgba(124,58,237,0.1) 0%, rgba(168,85,247,0.06) 60%, transparent 100%);
 }
+
+/* ─── Base ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
 html, body, #root {
   min-height: 100%;
-  background-color: var(--bg);
 }
 
 body {
+  background-color: rgb(var(--bg));
+  background-image: var(--gradient-page);
+  background-attachment: fixed;
+  color: rgb(var(--text));
   font-family: 'DM Sans', system-ui, sans-serif;
-  color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--surface); }
-::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+::-webkit-scrollbar-track { background: rgb(var(--surface)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--accent-dark)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--accent)); }
 
 /* ─── Components ─────────────────────────────────────────────── */
 @layer components {
 
-  /* Gold divider line */
+  /* ── Dividers ── */
   .gold-divider {
-    @apply w-16 h-0.5 bg-gold mx-auto;
+    @apply w-16 h-0.5 mx-auto;
+    background-color: rgb(var(--accent));
   }
 
-  /* Premium card */
+  /* ── Cards ── */
   .card {
     @apply bg-surface border border-brand-border rounded-xl p-6;
+    background-image: var(--gradient-card-top);
+    transition: border-color 0.2s, background-color 0.2s;
   }
 
   .card-elevated {
     @apply bg-surface-elevated border border-brand-border rounded-xl p-6;
   }
 
-  /* Gold button */
+  /* ── Buttons ── */
   .btn-gold {
-    @apply bg-gold text-black font-body font-semibold px-6 py-2.5 rounded-lg
-           hover:bg-gold-light active:bg-gold-dark transition-all duration-200
-           shadow-gold-sm hover:shadow-gold focus:outline-none focus:ring-2
-           focus:ring-gold focus:ring-offset-2 focus:ring-offset-brand-bg;
+    @apply font-body font-semibold px-6 py-2.5 rounded-lg transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-offset-2 inline-flex items-center justify-center;
+    background: var(--gradient-btn);
+    color: var(--btn-text);
+    box-shadow: var(--shadow-accent-sm);
+    focus-ring-color: rgb(var(--accent));
+    focus-ring-offset-color: rgb(var(--bg));
+  }
+  .btn-gold:hover {
+    opacity: 0.92;
+    box-shadow: var(--shadow-accent);
+    transform: translateY(-1px);
+  }
+  .btn-gold:active {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .btn-gold:focus {
+    outline: none;
+    box-shadow: var(--shadow-accent), 0 0 0 3px rgb(var(--accent) / 0.35);
   }
 
   .btn-ghost {
     @apply border border-brand-border text-brand-muted font-body px-6 py-2.5 rounded-lg
            hover:border-gold hover:text-gold transition-all duration-200
-           focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2
-           focus:ring-offset-brand-bg;
+           focus:outline-none inline-flex items-center justify-center;
   }
 
   .btn-danger {
     @apply bg-red-900/30 border border-red-800 text-red-400 font-body px-6 py-2.5
-           rounded-lg hover:bg-red-900/50 transition-all duration-200;
+           rounded-lg hover:bg-red-900/50 transition-all duration-200 inline-flex items-center justify-center;
   }
 
-  /* Form input */
+  /* ── Inputs ── */
   .input {
     @apply w-full bg-surface border border-brand-border rounded-lg px-4 py-3
            text-brand-text placeholder-brand-subtle font-body text-sm
-           focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold
-           transition-all duration-200;
+           focus:outline-none focus:border-gold transition-all duration-200;
+    focus-ring: 1px solid rgb(var(--accent));
+  }
+  .input:focus {
+    border-color: rgb(var(--accent));
+    box-shadow: 0 0 0 2px rgb(var(--accent) / 0.15);
   }
 
   .label {
     @apply block text-brand-muted text-xs font-semibold uppercase tracking-widest mb-2;
   }
 
-  /* Tab nav */
+  /* ── Tabs ── */
   .tab-btn {
     @apply px-5 py-3 text-sm font-medium text-brand-muted border-b-2 border-transparent
-           hover:text-brand-text hover:border-brand-border transition-all duration-200;
+           hover:text-brand-text hover:border-brand-border transition-all duration-200 whitespace-nowrap;
   }
-
   .tab-btn-active {
-    @apply px-5 py-3 text-sm font-medium text-gold border-b-2 border-gold;
+    @apply px-5 py-3 text-sm font-medium border-b-2 whitespace-nowrap;
+    color: rgb(var(--accent));
+    border-color: rgb(var(--accent));
   }
 
-  /* Badge */
+  /* ── Badges ── */
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
   }
-
   .badge-gold {
-    @apply badge bg-gold/15 text-gold border border-gold/30;
+    @apply badge;
+    background-color: rgb(var(--accent) / 0.12);
+    color: rgb(var(--accent));
+    border: 1px solid rgb(var(--accent) / 0.3);
   }
-
   .badge-green {
     @apply badge bg-green-900/30 text-green-400 border border-green-800;
   }
-
   .badge-red {
     @apply badge bg-red-900/30 text-red-400 border border-red-800;
   }
-
   .badge-blue {
     @apply badge bg-blue-900/30 text-blue-400 border border-blue-800;
   }
-
   .badge-purple {
     @apply badge bg-purple-900/30 text-purple-400 border border-purple-800;
   }
 
-  /* Table */
+  /* Light mode: make green/red/blue badges readable on white */
+  .light-theme .badge-green  { @apply bg-green-100 text-green-700 border-green-300; }
+  .light-theme .badge-red    { @apply bg-red-100 text-red-700 border-red-300; }
+  .light-theme .badge-blue   { @apply bg-blue-100 text-blue-700 border-blue-300; }
+  .light-theme .badge-purple { @apply bg-purple-100 text-purple-700 border-purple-300; }
+
+  /* ── Tables ── */
   .table-container {
     @apply overflow-x-auto rounded-xl border border-brand-border;
   }
-
-  .data-table {
-    @apply w-full text-sm;
-  }
-
+  .data-table { @apply w-full text-sm; }
   .data-table thead tr {
     @apply bg-surface-elevated border-b border-brand-border;
   }
-
   .data-table thead th {
     @apply text-left text-xs font-semibold text-brand-muted uppercase tracking-widest px-4 py-3;
   }
-
   .data-table tbody tr {
     @apply border-b border-brand-border last:border-0 hover:bg-surface-hover transition-colors duration-150;
   }
-
   .data-table tbody td {
     @apply px-4 py-3.5 text-brand-text;
   }
 
-  /* Gold glow pulse */
-  .gold-pulse {
-    @apply animate-pulse-gold rounded-full;
-  }
-
-  /* Heading font */
-  .font-display {
-    font-family: 'Cormorant Garamond', Georgia, serif;
-  }
+  /* ── Utilities ── */
+  .font-display { font-family: 'Cormorant Garamond', Georgia, serif; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   LIGHT MODE — accent + gradient enhancements
+   ───────────────────────────────────────────────────────────────── */
+
+/* Gradient hero strip on check-in page */
+.light-theme .checkin-hero {
+  background: linear-gradient(135deg, #7C3AED 0%, #A855F7 60%, #C084FC 100%);
+  border-radius: 1rem;
+  padding: 2rem;
+  color: white;
+}
+.light-theme .checkin-hero h1,
+.light-theme .checkin-hero h2,
+.light-theme .checkin-hero p { color: white !important; }
+
+/* Gradient stats card highlight */
+.light-theme .stats-highlight {
+  background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%) !important;
+  border-color: transparent !important;
+  color: white;
+}
+.light-theme .stats-highlight * { color: white !important; }
+
+/* Navbar gradient border in light mode */
+.light-theme header {
+  border-bottom: none;
+  box-shadow: 0 1px 0 0 rgb(var(--border)),
+              0 4px 20px -4px rgb(var(--accent) / 0.12);
+  background: rgba(255,255,255,0.92) !important;
+}
+
+/* Card top gradient more visible in light mode */
+.light-theme .card {
+  background-image: linear-gradient(180deg, rgb(var(--accent) / 0.04) 0%, transparent 40%);
+  box-shadow: 0 1px 3px rgb(var(--accent) / 0.08), 0 1px 8px rgb(0 0 0 / 0.04);
+}
+
+/* Gold accent text stays visible on light */
+.light-theme .text-gold { color: rgb(var(--accent)) !important; }
 
 /* ─── Animations ─────────────────────────────────────────────── */
 .animate-fade-in  { animation: fadeIn 0.4s ease-out both; }
@@ -165,14 +268,25 @@ body {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(24px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Stagger delays for sequential elements */
+/* Stagger delays */
 .delay-100 { animation-delay: 0.1s; }
 .delay-200 { animation-delay: 0.2s; }
 .delay-300 { animation-delay: 0.3s; }
 .delay-400 { animation-delay: 0.4s; }
+
+/* ─── Smooth theme transitions ───────────────────────────────── */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+/* But don't slow down animations */
+.animate-spin, .animate-ping, .animate-pulse,
+.animate-fade-in, .animate-slide-up {
+  transition: none !important;
+}

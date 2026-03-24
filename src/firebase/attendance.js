@@ -4,7 +4,6 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
   serverTimestamp,
   onSnapshot,
 } from 'firebase/firestore'
@@ -14,7 +13,6 @@ const ATTENDANCE = 'attendance'
 
 /**
  * Check if a member has already checked in for a service.
- * Returns true if a duplicate exists.
  */
 export async function hasCheckedIn(memberId, serviceId) {
   const q = query(
@@ -27,8 +25,7 @@ export async function hasCheckedIn(memberId, serviceId) {
 }
 
 /**
- * Log a check-in for a member + service.
- * Returns the new attendance document ID.
+ * Log a check-in. Returns the new attendance document ID.
  */
 export async function checkIn(memberId, serviceId, isNew = false) {
   const ref = await addDoc(collection(db, ATTENDANCE), {
@@ -41,50 +38,53 @@ export async function checkIn(memberId, serviceId, isNew = false) {
 }
 
 /**
- * Get all attendance records for a specific service.
+ * Get all attendance records for a specific service (one-shot).
+ * Sorts client-side to avoid needing a Firestore composite index.
  */
 export async function getAttendanceForService(serviceId) {
-  const q = query(
-    collection(db, ATTENDANCE),
-    where('serviceId', '==', serviceId),
-    orderBy('checkedInAt', 'asc')
-  )
+  const q = query(collection(db, ATTENDANCE), where('serviceId', '==', serviceId))
   const snap = await getDocs(q)
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.checkedInAt?.seconds ?? 0) - (b.checkedInAt?.seconds ?? 0))
 }
 
 /**
  * Get all attendance records for a specific member (their history).
+ * Sorts client-side — newest first.
  */
 export async function getAttendanceForMember(memberId) {
-  const q = query(
-    collection(db, ATTENDANCE),
-    where('memberId', '==', memberId),
-    orderBy('checkedInAt', 'desc')
-  )
+  const q = query(collection(db, ATTENDANCE), where('memberId', '==', memberId))
   const snap = await getDocs(q)
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.checkedInAt?.seconds ?? 0) - (a.checkedInAt?.seconds ?? 0))
 }
 
 /**
- * Subscribe to real-time attendance updates for a service.
- * Calls callback(records[]) whenever the collection changes.
+ * Real-time subscription to attendance for a service.
+ * Uses only a `where` clause (no orderBy) to avoid needing a Firestore composite index.
+ * Sorts results client-side so they're always in check-in order.
  * Returns the unsubscribe function.
  */
 export function subscribeToServiceAttendance(serviceId, callback) {
   const q = query(
     collection(db, ATTENDANCE),
-    where('serviceId', '==', serviceId),
-    orderBy('checkedInAt', 'asc')
+    where('serviceId', '==', serviceId)
   )
+
   return onSnapshot(q, (snap) => {
-    const records = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    const records = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.checkedInAt?.seconds ?? 0) - (b.checkedInAt?.seconds ?? 0))
     callback(records)
+  }, (error) => {
+    console.error('Attendance subscription error:', error)
   })
 }
 
 /**
- * Get the count of check-ins for a service (one-shot).
+ * Get the check-in count for a service (one-shot).
  */
 export async function getServiceAttendanceCount(serviceId) {
   const q = query(collection(db, ATTENDANCE), where('serviceId', '==', serviceId))
