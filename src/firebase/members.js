@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   getDoc,
   getDocs,
   updateDoc,
@@ -21,11 +22,47 @@ export function isStaffAccountStudentId(studentId) {
   return typeof studentId === 'string' && studentId.startsWith(STAFF_STUDENT_ID_PREFIX)
 }
 
-/** Human-friendly label for the Members UI (hides raw `auth-…` ids). */
+/**
+ * Canonical key for a member. Members are keyed by phone number, so any way a
+ * person types theirs — 0207672476, 207672476, (+233) 207 672 476 — must resolve
+ * to one value. Returns '' when the input isn't a usable phone number.
+ */
+export function normalizePhoneKey(input) {
+  if (!input) return ''
+  const raw = String(input).trim()
+  if (isStaffAccountStudentId(raw)) return raw          // auth-{uid} passes through
+  let d = raw.replace(/\D/g, '')
+  if (d.startsWith('00233')) d = d.slice(5)
+  else if (d.startsWith('233')) d = d.slice(3)
+  d = d.replace(/^0+/, '')
+  if (d.length === 9) return `+233${d}`                 // Ghana
+  if (d.length >= 10 && d.length <= 14) return `+${d}`  // international, already has a country code
+  return ''
+}
+
+/** Human-friendly label for the Members UI (hides raw `auth-…` ids, shows phones locally). */
 export function formatStudentIdForDisplay(studentId) {
   if (!studentId) return '—'
   if (isStaffAccountStudentId(studentId)) return 'Staff (login)'
+  const gh = /^\+233(\d{2})(\d{3})(\d{4})$/.exec(studentId)
+  if (gh) return `0${gh[1]} ${gh[2]} ${gh[3]}`
   return studentId
+}
+
+const MONTH_NAMES = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December']
+
+/**
+ * Members imported from the church roster often have only a day and month —
+ * no year was ever recorded. `birthdayMD` ('MM-DD') holds those; `birthday`
+ * holds a full 'YYYY-MM-DD' when the year is actually known. Never invent a year.
+ */
+export function formatBirthday(member) {
+  const md = member?.birthdayMD || (member?.birthday ? member.birthday.slice(5) : '')
+  if (!/^\d{2}-\d{2}$/.test(md)) return '—'
+  const [mm, dd] = md.split('-').map(Number)
+  if (!MONTH_NAMES[mm - 1]) return '—'
+  return `${dd} ${MONTH_NAMES[mm - 1]}`
 }
 
 /** Get a single member by Firestore document ID. */
@@ -37,19 +74,81 @@ export async function getMemberById(memberId) {
 
 /** Look up a member by their studentId field. Returns null if not found. */
 export async function getMemberByStudentId(studentId) {
-  const q = query(collection(db, MEMBERS), where('studentId', '==', studentId))
+  const key = normalizePhoneKey(studentId) || String(studentId || '').trim()
+  const q = query(collection(db, MEMBERS), where('studentId', '==', key))
   const snap = await getDocs(q)
   if (snap.empty) return null
   return { id: snap.docs[0].id, ...snap.docs[0].data() }
 }
 
 /** Look up a member by their email address. Used to resolve a signed-in admin's role. */
+const ROLE_RANK = { superadmin: 3, admin: 2, leader: 1, member: 0 }
+
 export async function getMemberByEmail(email) {
   if (!email) return null
   const q = query(collection(db, MEMBERS), where('email', '==', email.toLowerCase().trim()))
   const snap = await getDocs(q)
   if (snap.empty) return null
-  return { id: snap.docs[0].id, ...snap.docs[0].data() }
+  // Firestore returns docs in arbitrary order. If an email ever resolves to more
+  // than one row, picking docs[0] would make the signed-in user's permissions vary
+  // between sessions — always resolve to the highest-privilege row instead.
+  const best = snap.docs.reduce((a, b) =>
+    (ROLE_RANK[b.data().role] ?? 0) > (ROLE_RANK[a.data().role] ?? 0) ? b : a)
+  return { id: best.id, ...best.data() }
+}
+
+/** Title-case a search term so it matches how names are stored ('caleb' -> 'Caleb'). */
+function capitalize(word) {
+  return word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : ''
+}
+
+/** Last 4 digits only — enough to tell two same-named people apart without exposing the number. */
+export function maskPhone(phone) {
+  const d = String(phone || '').replace(/\D/g, '')
+  if (d.length < 4) return ''
+  return `••• ${d.slice(-4)}`
+}
+
+let searchCache = null
+
+/** Drop the cached roster — call after a new member is created mid-session. */
+export function invalidateMemberSearchCache() {
+  searchCache = null
+}
+
+/**
+ * Find members by any part of their name.
+ *
+ * Firestore has no substring search. Prefix range queries were tried first, but
+ * they only match the START of a field, so searching "arthur" missed
+ * "Caleb Akwesie Arthur" — and this roster is full of compound surnames
+ * (Owusu-Marfo, Danquah-Boateng) that people search by the second half of.
+ * Fetching once and filtering in JS is the same tradeoff attendance.js makes,
+ * and the collection is a few hundred docs.
+ *
+ * Note: `members` is world-readable per firestore.rules, so this downloads the
+ * roster to an unauthenticated page. That exposure already exists via the public
+ * API key; tightening it means restricting member reads, not changing this query.
+ */
+export async function searchMembersByName(term) {
+  const cleaned = (term || '').trim().replace(/\s+/g, ' ')
+  if (cleaned.length < 2) return []
+
+  if (!searchCache) {
+    const snap = await getDocs(collection(db, MEMBERS))
+    searchCache = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => !isStaffAccountStudentId(m.studentId))   // staff login rows aren't attendees
+  }
+
+  const words = cleaned.toLowerCase().split(' ')
+  return searchCache
+    .filter(m => {
+      const full = `${m.firstName || ''} ${m.lastName || ''}`.toLowerCase()
+      return words.every(w => full.includes(w))
+    })
+    .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
+    .slice(0, 25)
 }
 
 /** Create a new member document. Returns the new document ID. */
@@ -57,10 +156,13 @@ export async function createMember(data) {
   const ref = await addDoc(collection(db, MEMBERS), {
     firstName:  data.firstName.trim(),
     lastName:   data.lastName.trim(),
-    studentId:  data.studentId.trim(),
-    phone:      data.phone?.trim()  || '',
+    studentId:  normalizePhoneKey(data.studentId) || data.studentId.trim(),
+    phone:      normalizePhoneKey(data.phone || data.studentId) || (data.phone?.trim() || ''),
     email:      (data.email?.trim() || '').toLowerCase(),
     birthday:   data.birthday || '',
+    birthdayMD: data.birthdayMD || (data.birthday ? data.birthday.slice(5) : ''),
+    cohort:     data.cohort || '',
+    hostel:     data.hostel || '',
     role:       'member',
     joinedDate: serverTimestamp(),
     createdBy:  data.createdBy || 'self',
@@ -159,7 +261,10 @@ export async function ensureMemberForAuthUser(firebaseUser) {
     }
   }
 
-  const ref = await addDoc(collection(db, MEMBERS), {
+  // Keyed by uid, not a random id: two concurrent sign-ins can both see "no member
+  // row yet" and race here, and addDoc would happily create a duplicate.
+  const ref = doc(db, MEMBERS, firebaseUser.uid)
+  await setDoc(ref, {
     firstName,
     lastName,
     studentId,
@@ -169,7 +274,7 @@ export async function ensureMemberForAuthUser(firebaseUser) {
     role: 'admin',
     joinedDate: serverTimestamp(),
     createdBy: 'auth_sync',
-  })
+  }, { merge: true })
   const snap = await getDoc(ref)
   return { id: ref.id, ...snap.data() }
 }

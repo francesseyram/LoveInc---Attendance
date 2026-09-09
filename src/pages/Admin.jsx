@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 import Navbar          from '../components/Navbar'
@@ -8,11 +8,13 @@ import MemberTable     from '../components/MemberTable'
 import ServiceCard     from '../components/ServiceCard'
 import QRModal         from '../components/QRModal'
 import NewServiceModal from '../components/NewServiceModal'
+import AttendanceAnalysis from '../components/AttendanceAnalysis'
 
 import { useAuth, useTheme } from '../App'
 import { subscribeToServiceAttendance, getAttendanceForService } from '../firebase/attendance'
 import { getAllServices, getActiveService, setActiveService, completeService, deleteService } from '../firebase/services'
 import { getAllMembers, getMemberById }                           from '../firebase/members'
+import { getAllAttendance, buildAnalytics }                        from '../firebase/analytics'
 
 const TABS = ['Live', 'Services', 'Members', 'Stats']
 
@@ -35,7 +37,7 @@ function exportCSV(records, allMembers, serviceName) {
   allMembers.forEach(m => { memberMap[m.id] = m })
 
   const checkedInIds = new Set(records.map(r => r.memberId))
-  const rows = [['Name', 'Student ID', 'Role', 'Check-In Time', 'Status']]
+  const rows = [['Name', 'Phone', 'Cohort', 'Role', 'Check-In Time', 'Status']]
 
   records.forEach(r => {
     const m    = memberMap[r.memberId] || {}
@@ -43,7 +45,7 @@ function exportCSV(records, allMembers, serviceName) {
       ? r.checkedInAt.toDate().toLocaleTimeString('en-GB') : '—'
     rows.push([
       `${m.firstName || ''} ${m.lastName || ''}`.trim(),
-      m.studentId || '—', m.role || '—', time, 'Present',
+      m.studentId || '—', m.cohort || '—', m.role || '—', time, 'Present',
     ])
   })
 
@@ -51,7 +53,7 @@ function exportCSV(records, allMembers, serviceName) {
     if (!checkedInIds.has(m.id)) {
       rows.push([
         `${m.firstName || ''} ${m.lastName || ''}`.trim(),
-        m.studentId || '—', m.role || '—', '—', 'Absent',
+        m.studentId || '—', m.cohort || '—', m.role || '—', '—', 'Absent',
       ])
     }
   })
@@ -100,6 +102,8 @@ export default function Admin() {
   const [svcCounts,       setSvcCounts]        = useState({})
   const [qrService,       setQrService]        = useState(null)
   const [showNewSvc,      setShowNewSvc]       = useState(false)
+  const [allAttendance,   setAllAttendance]    = useState([])
+  const [analyticsLoading, setAnalyticsLoading] = useState(true)
 
   // ─── Data loading ───────────────────────────────────────────
   const loadServices = useCallback(async () => {
@@ -125,7 +129,20 @@ export default function Admin() {
     finally { setMembersLoading(false) }
   }, [])
 
-  useEffect(() => { loadServices(); loadMembers() }, [loadServices, loadMembers])
+  const loadAttendance = useCallback(async () => {
+    setAnalyticsLoading(true)
+    try { setAllAttendance(await getAllAttendance()) }
+    finally { setAnalyticsLoading(false) }
+  }, [])
+
+  useEffect(() => { loadServices(); loadMembers(); loadAttendance() },
+    [loadServices, loadMembers, loadAttendance])
+
+  // Recomputed in JS rather than queried — see src/firebase/analytics.js.
+  const analytics = useMemo(
+    () => buildAnalytics({ members: allMembers, services, attendance: allAttendance }),
+    [allMembers, services, allAttendance],
+  )
 
   // ─── Real-time attendance ───────────────────────────────────
   useEffect(() => {
@@ -298,102 +315,31 @@ export default function Admin() {
         {/* ── Members ── */}
         {tab === 'Members' && (
           <div className="animate-fade-in">
-            <MemberTable members={allMembers} loading={membersLoading} />
+            <MemberTable members={analytics.memberRows} loading={membersLoading} />
           </div>
         )}
 
         {/* ── Stats ── */}
         {tab === 'Stats' && (
           <div className="space-y-6 animate-fade-in">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <StatsCard label="Total Members"    value={allMembers.length}  icon="" />
-              <StatsCard label="Total Services"   value={services.length}    icon="" />
-              <StatsCard label="Total Attendance" value={totalAttendance}    icon="" />
-              <StatsCard label="Avg per Service"  value={avgAttendance}      icon="" />
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  if (!activeService) { alert('Select an active service first.'); return }
+                  exportCSV(rawAttendance, allMembers, activeService.name)
+                }}
+                className="btn-ghost text-sm py-2 px-4 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export active service CSV
+              </button>
             </div>
 
-            <div className="card">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="font-display text-xl font-semibold text-brand-text">Attendance Trend</h3>
-                  <p className="text-brand-muted text-xs mt-0.5">Last {Math.min(6, services.length)} services</p>
-                </div>
-                <button
-                  onClick={() => {
-                    if (!activeService) { alert('Select an active service first.'); return }
-                    exportCSV(rawAttendance, allMembers, activeService.name)
-                  }}
-                  className="btn-ghost text-sm py-2 px-4 flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Export CSV
-                </button>
-              </div>
-
-              {chartData.length === 0 ? (
-                <div className="text-center py-12 text-brand-muted">No data yet.</div>
-              ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
-                    <XAxis dataKey="name" tick={{ fill: chartColors.axis, fontSize: 11, fontFamily: 'DM Sans' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: chartColors.axis, fontSize: 11, fontFamily: 'DM Sans' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip content={<CustomTooltip colors={chartColors} />} cursor={{ fill: `${chartColors.bar}18` }} />
-                    <Bar dataKey="count" fill={chartColors.bar} radius={[6, 6, 0, 0]} maxBarSize={60} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className="card">
-              <h3 className="font-display text-xl font-semibold text-brand-text mb-4">Per-Service Breakdown</h3>
-              {services.length === 0 ? (
-                <div className="text-center py-8 text-brand-muted">No services yet.</div>
-              ) : (
-                <>
-                  <div className="table-container">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Service</th><th>Date</th><th>Type</th><th>Status</th><th>Attended</th><th>First Timers</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {services.map(s => (
-                          <tr key={s.id}>
-                            <td className="font-medium text-brand-text">{s.name}</td>
-                            <td className="text-brand-muted text-sm">{s.date}</td>
-                            <td className="text-brand-muted text-sm">{s.type}</td>
-                            <td>
-                              {s.isCompleted
-                                ? <span className="badge bg-surface-elevated text-brand-muted border border-brand-border">Completed</span>
-                                : s.isActive
-                                  ? <span className="badge-green">Active</span>
-                                  : <span className="badge bg-surface-elevated text-brand-subtle border border-brand-border">Inactive</span>
-                              }
-                            </td>
-                            <td><span className="font-display text-lg text-brand-text">{svcCounts[s.id]?.total ?? 0}</span></td>
-                            <td><span className="font-display text-lg text-gold">{svcCounts[s.id]?.newMembers ?? 0}</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-brand-border flex items-center gap-8 text-sm">
-                    <div>
-                      <span className="text-brand-subtle">Total first-timers: </span>
-                      <span className="text-gold font-semibold font-display text-xl">{totalFirstTimers}</span>
-                    </div>
-                    <div>
-                      <span className="text-brand-subtle">Avg attendance: </span>
-                      <span className="text-brand-text font-semibold font-display text-xl">{avgAttendance}</span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            {analyticsLoading
+              ? <div className="card text-center py-16 text-brand-muted text-sm">Crunching attendance…</div>
+              : <AttendanceAnalysis analytics={analytics} chartColors={chartColors} />}
           </div>
         )}
       </main>

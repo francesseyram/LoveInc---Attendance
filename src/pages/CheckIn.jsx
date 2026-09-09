@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getServiceById } from '../firebase/services'
-import { getMemberByStudentId, createMember, studentIdExists } from '../firebase/members'
+import { getServiceById, getActiveService } from '../firebase/services'
+import {
+  getMemberByStudentId, createMember, studentIdExists,
+  normalizePhoneKey, searchMembersByName, maskPhone, invalidateMemberSearchCache,
+} from '../firebase/members'
 import { checkIn, hasCheckedIn } from '../firebase/attendance'
 import { useTheme } from '../App'
 
@@ -66,10 +69,21 @@ function Logo() {
   )
 }
 
+const MONTH_OPTIONS = [
+  ['01','January'],['02','February'],['03','March'],['04','April'],['05','May'],['06','June'],
+  ['07','July'],['08','August'],['09','September'],['10','October'],['11','November'],['12','December'],
+]
+const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'))
+// Ashesi class years. Matches the `cohort` values imported from the church roster.
+const CLASS_OPTIONS = ['C2026','C2027','C2028','C2029','C2030','Staff','Alumni','Visitor']
+
 // ─── Main Component ──────────────────────────────────────────
 export default function CheckIn() {
   const [params]    = useSearchParams()
   const serviceId   = params.get('s')
+  // A shared tablet at the door behaves differently from someone's own phone:
+  // it clears itself after each person so the next one can walk up.
+  const kioskMode   = params.get('kiosk') === '1'
 
   const [service,      setService]      = useState(null)
   const [pageLoading,  setPageLoading]  = useState(true)
@@ -80,17 +94,18 @@ export default function CheckIn() {
   const [submitting,   setSubmitting]   = useState(false)
 
   const [firstForm, setFirstForm] = useState({
-    firstName: '', lastName: '', studentId: '', phone: '', email: '', birthday: '',
+    firstName: '', lastName: '', phone: '', email: '',
+    birthMonth: '', birthDay: '', cohort: '', hostel: '',
   })
-  const [studentIdInput, setStudentIdInput] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [results,    setResults]    = useState(null)   // null = not searched yet
+  const [searching,  setSearching]  = useState(false)
 
   useEffect(() => {
-    if (!serviceId) {
-      setNotFound(true)
-      setPageLoading(false)
-      return
-    }
-    getServiceById(serviceId)
+    // QR codes carry ?s={serviceId}. A bare /checkin falls back to the active
+    // service so a printed link keeps working week to week.
+    const load = serviceId ? getServiceById(serviceId) : getActiveService()
+    load
       .then(s => {
         if (!s) setNotFound(true)
         else setService(s)
@@ -99,29 +114,37 @@ export default function CheckIn() {
       .finally(() => setPageLoading(false))
   }, [serviceId])
 
+  const activeId = service?.id
+
   const setFF = (field) => (e) => setFirstForm(p => ({ ...p, [field]: e.target.value }))
 
   const handleFirstTimerSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    const { firstName, lastName, studentId } = firstForm
-    if (!firstName.trim() || !lastName.trim() || !studentId.trim()) {
-      setError('First name, last name, and Student ID are required.')
+    const { firstName, lastName, phone, birthMonth, birthDay } = firstForm
+    if (!firstName.trim() || !lastName.trim() || !phone.trim()) {
+      setError('First name, last name, and phone number are required.')
+      return
+    }
+
+    const phoneKey = normalizePhoneKey(phone)
+    if (!phoneKey) {
+      setError("That phone number doesn't look right. Use the format 0XX XXX XXXX.")
       return
     }
 
     setSubmitting(true)
     try {
-      const exists = await studentIdExists(studentId.trim())
+      const exists = await studentIdExists(phoneKey)
       if (exists) {
-        setError('This Student ID is already registered. Please use "Been here before?" to check in.')
+        setError('This number is already registered. Please use "Been here before" to check in.')
         setSubmitting(false)
         return
       }
 
-      const existing = await getMemberByStudentId(studentId.trim())
+      const existing = await getMemberByStudentId(phoneKey)
       if (existing) {
-        const dup = await hasCheckedIn(existing.id, serviceId)
+        const dup = await hasCheckedIn(existing.id, activeId)
         if (dup) {
           setError('You have already checked in to this service.')
           setSubmitting(false)
@@ -129,8 +152,12 @@ export default function CheckIn() {
         }
       }
 
-      const memberId = await createMember({ ...firstForm, createdBy: 'self' })
-      await checkIn(memberId, serviceId, true)
+      const birthdayMD = birthMonth && birthDay ? `${birthMonth}-${birthDay}` : ''
+      invalidateMemberSearchCache()
+      const memberId = await createMember({
+        ...firstForm, studentId: phoneKey, birthdayMD, birthday: '', createdBy: 'self',
+      })
+      await checkIn(memberId, activeId, true)
 
       setSuccessData({
         name:  `${firstForm.firstName} ${firstForm.lastName}`,
@@ -146,32 +173,47 @@ export default function CheckIn() {
     }
   }
 
-  const handleReturningSubmit = async (e) => {
-    e.preventDefault()
+  // ─── Search by name (primary returning path) ───────────────
+  const handleSearch = async (e) => {
+    e?.preventDefault()
     setError('')
-    if (!studentIdInput.trim()) {
-      setError('Please enter your Student ID.')
+    const term = searchTerm.trim()
+    if (term.length < 2) {
+      setError('Type at least two letters of your name.')
       return
     }
 
+    setSearching(true)
+    try {
+      // Someone may still type a phone number here — treat that as an exact lookup.
+      const asPhone = normalizePhoneKey(term)
+      if (asPhone) {
+        const m = await getMemberByStudentId(asPhone)
+        setResults(m ? [m] : [])
+      } else {
+        setResults(await searchMembersByName(term))
+      }
+    } catch (err) {
+      console.error(err)
+      setError('Search failed. Please try again.')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  /** Mark one specific, confirmed person present. Never called from a bare search hit. */
+  const markPresent = async (member) => {
+    setError('')
     setSubmitting(true)
     try {
-      const member = await getMemberByStudentId(studentIdInput.trim())
-      if (!member) {
-        setError("We couldn't find you. If this is your first time, please use the first-timer form.")
-        setSubmitting(false)
-        return
-      }
-
-      const dup = await hasCheckedIn(member.id, serviceId)
+      const dup = await hasCheckedIn(member.id, activeId)
       if (dup) {
         setError(`${member.firstName}, you've already checked in to this service. See you inside! 👋`)
         setSubmitting(false)
         return
       }
 
-      await checkIn(member.id, serviceId, false)
-
+      await checkIn(member.id, activeId, false)
       setSuccessData({
         name:  `${member.firstName} ${member.lastName}`,
         time:  new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
@@ -185,6 +227,21 @@ export default function CheckIn() {
       setSubmitting(false)
     }
   }
+
+  /** Wipe every transient bit of state so the next person starts clean. */
+  const resetToStart = () => {
+    setStep('choose'); setError(''); setSuccessData(null)
+    setSearchTerm(''); setResults(null)
+    setFirstForm({ firstName: '', lastName: '', phone: '', email: '',
+                   birthMonth: '', birthDay: '', cohort: '', hostel: '' })
+  }
+
+  // On a shared device, hand the screen back automatically.
+  useEffect(() => {
+    if (step !== 'success' || !kioskMode) return
+    const t = setTimeout(resetToStart, 6000)
+    return () => clearTimeout(t)
+  }, [step, kioskMode])
 
   // ─── Render states ─────────────────────────────────────────
 
@@ -254,8 +311,14 @@ export default function CheckIn() {
               }
             </p>
           </div>
+          {kioskMode && (
+            <button type="button" onClick={resetToStart} className="btn-gold w-full mt-5 py-3">
+              Next person
+            </button>
+          )}
           <p className="text-brand-subtle text-xs mt-6">
             Love Inc Global · {service?.name}
+            {kioskMode && <span className="block mt-1">Returning to search…</span>}
           </p>
         </div>
       </div>
@@ -281,20 +344,20 @@ export default function CheckIn() {
 
         {step === 'choose' && (
           <div className="space-y-3 animate-slide-up delay-200">
-            <p className="text-center text-brand-muted text-sm mb-4">Is this your first time at Love Inc?</p>
+            <p className="text-center text-brand-muted text-sm mb-4">Mark yourself present</p>
             <button
               type="button"
-              onClick={() => { setStep('first'); setError('') }}
+              onClick={() => { setStep('search'); setError('') }}
               className="w-full btn-gold py-4 text-base"
             >
-              First time here!
+              Find my name
             </button>
             <button
               type="button"
-              onClick={() => { setStep('returning'); setError('') }}
+              onClick={() => { setStep('first'); setError('') }}
               className="w-full btn-ghost py-4 text-base"
             >
-              Been here before
+              I'm new here
             </button>
           </div>
         )}
@@ -316,20 +379,40 @@ export default function CheckIn() {
                 </div>
               </div>
               <div>
-                <label className="label">Student ID *</label>
-                <input type="text" className="input" placeholder="e.g. 3987654" value={firstForm.studentId} onChange={setFF('studentId')} />
-              </div>
-              <div>
-                <label className="label">Phone</label>
-                <input type="tel" className="input" placeholder="+233 XX XXX XXXX" value={firstForm.phone} onChange={setFF('phone')} />
+                <label className="label">Phone Number *</label>
+                <input type="tel" className="input" placeholder="0XX XXX XXXX" value={firstForm.phone} onChange={setFF('phone')} />
+                <p className="text-brand-subtle text-xs mt-1">This is how you'll check in next time.</p>
               </div>
               <div>
                 <label className="label">Email</label>
                 <input type="email" className="input" placeholder="you@ashesi.edu.gh" value={firstForm.email} onChange={setFF('email')} />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Class</label>
+                  <select className="input" value={firstForm.cohort} onChange={setFF('cohort')}>
+                    <option value="">Select…</option>
+                    {CLASS_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Hostel</label>
+                  <input type="text" className="input" placeholder="e.g. Dufie" value={firstForm.hostel} onChange={setFF('hostel')} />
+                </div>
+              </div>
               <div>
                 <label className="label">Birthday</label>
-                <input type="date" className="input" value={firstForm.birthday} onChange={setFF('birthday')} />
+                <div className="grid grid-cols-2 gap-3">
+                  <select className="input" value={firstForm.birthMonth} onChange={setFF('birthMonth')}>
+                    <option value="">Month</option>
+                    {MONTH_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <select className="input" value={firstForm.birthDay} onChange={setFF('birthDay')}>
+                    <option value="">Day</option>
+                    {DAY_OPTIONS.map(d => <option key={d} value={d}>{Number(d)}</option>)}
+                  </select>
+                </div>
+                <p className="text-brand-subtle text-xs mt-1">Day and month only — we don't ask for the year.</p>
               </div>
 
               {error && (
@@ -353,59 +436,77 @@ export default function CheckIn() {
           </div>
         )}
 
-        {step === 'returning' && (
+        {step === 'search' && (
           <div className="card animate-slide-up">
-            <h3 className="font-display text-xl font-semibold text-brand-text mb-1">Welcome back!</h3>
-            <p className="text-brand-muted text-sm mb-5">Enter your Student ID to check in.</p>
+            <h3 className="font-display text-xl font-semibold text-brand-text mb-1">Find your name</h3>
+            <p className="text-brand-muted text-sm mb-5">Search your name, then tap yourself in the list.</p>
 
-            <form onSubmit={handleReturningSubmit} className="space-y-4">
+            <form onSubmit={handleSearch} className="space-y-4">
               <div>
-                <label className="label">Student ID</label>
-                <input
-                  type="text"
-                  className="input text-center text-lg tracking-wider"
-                  placeholder="e.g. 3987654"
-                  value={studentIdInput}
-                  onChange={e => setStudentIdInput(e.target.value)}
-                  autoFocus
-                />
-              </div>
-
-              {error && (
-                <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-4 py-2">{error}</p>
-              )}
-
-              <div className="flex gap-3">
-                <button type="button" onClick={() => { setStep('choose'); setError('') }} className="btn-ghost flex-1">
-                  Back
-                </button>
-                <button type="submit" disabled={submitting} className="btn-gold flex-1">
-                  {submitting ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                      Checking in…
-                    </span>
-                  ) : 'Check In'}
-                </button>
+                <label className="label">Your Name</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g. Kwame Mensah"
+                    value={searchTerm}
+                    onChange={e => { setSearchTerm(e.target.value); setResults(null); setError('') }}
+                    autoFocus
+                  />
+                  <button type="submit" disabled={searching} className="btn-gold px-5 shrink-0">
+                    {searching ? '…' : 'Search'}
+                  </button>
+                </div>
+                <p className="text-brand-subtle text-xs mt-1">You can also type your phone number.</p>
               </div>
             </form>
 
-            <p className="text-center text-brand-subtle text-xs mt-4">
-              First time?{' '}
-              <button
-                type="button"
-                onClick={() => { setStep('first'); setError('') }}
-                className="text-gold hover:text-gold-light transition-colors"
-              >
-                Register here
-              </button>
-            </p>
+            {error && (
+              <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-4 py-2 mt-4">{error}</p>
+            )}
+
+            {results !== null && !searching && (
+              <div className="mt-5">
+                {results.length === 0 ? (
+                  <div className="text-center py-6">
+                    <p className="text-brand-muted text-sm mb-1">No one found for "{searchTerm}".</p>
+                    <p className="text-brand-subtle text-xs mb-4">Check the spelling, or register as a new member.</p>
+                    <button type="button" onClick={() => { setStep('first'); setError('') }} className="btn-gold px-6">
+                      I'm new here
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="label mb-2">
+                      {results.length === 1 ? 'Is this you?' : `${results.length} matches — tap yourself`}
+                    </p>
+                    <div className="space-y-2 max-h-72 overflow-y-auto">
+                      {results.map(m => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => markPresent(m)}
+                          className="w-full text-left px-4 py-3 rounded-lg border border-brand-border bg-surface-elevated hover:border-gold/40 hover:bg-surface-hover transition-all disabled:opacity-50"
+                        >
+                          <p className="text-brand-text font-medium text-sm">{m.firstName} {m.lastName}</p>
+                          <p className="text-brand-subtle text-xs mt-0.5">
+                            {[m.cohort, maskPhone(m.studentId), m.hostel].filter(Boolean).join(' · ') || 'No other details'}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-5">
+              <button type="button" onClick={resetToStart} className="btn-ghost flex-1">Back</button>
+            </div>
           </div>
         )}
 
-        <p className="text-center text-brand-subtle text-xs mt-8">
-          Love Inc Global · Est. 2022 · Ashesi University, Ghana
-        </p>
       </div>
     </div>
   )

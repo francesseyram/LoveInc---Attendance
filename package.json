@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "install:fast": "npm install --no-audit --no-fund",
-    "install:ci": "npm ci --no-audit --no-fund"
+    "install:ci": "npm ci --no-audit --no-fund",
+    "dev:sandbox": "vite --mode sandbox",
+    "build:sandbox": "vite build --mode sandbox",
+    "seed:sandbox": "SEED_ENV_FILE=.env.sandbox node scripts/seed-members.mjs"
   },
   "dependencies": {
     "firebase": "^10.13.0",

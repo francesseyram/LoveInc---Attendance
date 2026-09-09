@@ -5,6 +5,7 @@ dist/
 # Environment & secrets — never commit real keys (use `.env.example` as the template)
 .env
 .env.local
+.env.sandbox
 .env.development.local
 .env.test.local
 .env.production.local
@@ -33,3 +34,8 @@ pnpm-debug.log*
 coverage/
 .vercel/
 *.tsbuildinfo
+
+# Member roster PII — real names, phone numbers, emails, birthdays.
+# Keep out of git unless this repo is private and the team agrees to it.
+scripts/members-seed.json
+members_for_review.csv

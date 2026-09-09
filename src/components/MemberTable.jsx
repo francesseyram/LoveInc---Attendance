@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatStudentIdForDisplay } from '../firebase/members'
+import { formatLastSeen } from '../firebase/analytics'
 
 const ROLE_BADGE = {
   superadmin: 'badge-purple',
@@ -30,6 +31,7 @@ export default function MemberTable({ members = [], loading = false }) {
     const matchesSearch =
       `${m.firstName} ${m.lastName}`.toLowerCase().includes(term) ||
       (m.studentId || '').toLowerCase().includes(term) ||
+      (m.cohort    || '').toLowerCase().includes(term) ||
       (m.email || '').toLowerCase().includes(term)
     const matchesRole = roleFilter === 'all' || m.role === roleFilter
     return matchesSearch && matchesRole
@@ -86,10 +88,10 @@ export default function MemberTable({ members = [], loading = false }) {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Student ID</th>
-                <th>Role</th>
                 <th>Phone</th>
-                <th>Joined</th>
+                <th>Role</th>
+                <th>Cohort</th>
+                <th>Last seen</th>
                 <th></th>
               </tr>
             </thead>
@@ -115,8 +117,12 @@ export default function MemberTable({ members = [], loading = false }) {
                       {m.role || 'member'}
                     </span>
                   </td>
-                  <td className="text-brand-muted text-sm">{m.phone || '—'}</td>
-                  <td className="text-brand-muted text-xs">{formatDate(m.joinedDate)}</td>
+                  <td className="text-brand-muted text-sm">{m.cohort || '—'}</td>
+                  <td className="text-xs">
+                    {m.lastSeenAt
+                      ? <span className="text-brand-muted">{formatLastSeen(m)}</span>
+                      : <span className="text-brand-subtle">Never</span>}
+                  </td>
                   <td>
                     <button
                       onClick={() => navigate(`/admin/members/${m.id}`)}

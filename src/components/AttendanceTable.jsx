@@ -74,7 +74,7 @@ export default function AttendanceTable({ records = [], loading = false }) {
               <tr>
                 <th>#</th>
                 <th>Name</th>
-                <th>Student ID</th>
+                <th>Phone</th>
                 <th>Role</th>
                 <th>Check-In Time</th>
                 <th>Status</th>

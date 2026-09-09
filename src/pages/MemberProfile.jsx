@@ -7,6 +7,7 @@ import {
   updateMemberRole,
   formatStudentIdForDisplay,
   validateRoleAssignment,
+  formatBirthday,
   ROLES_ASSIGNABLE_BY_ADMIN,
   ROLES_ASSIGNABLE_BY_SUPERADMIN,
 } from '../firebase/members'
@@ -172,7 +173,8 @@ export default function MemberProfile() {
                   </span>
                 </div>
                 <p className="text-brand-muted text-sm mt-1">
-                  Student ID: <span className="font-mono text-brand-text">{formatStudentIdForDisplay(member.studentId)}</span>
+                  Phone: <span className="font-mono text-brand-text">{formatStudentIdForDisplay(member.studentId)}</span>
+                  {member.cohort && <span className="ml-2 text-brand-subtle">· {member.cohort}</span>}
                 </p>
                 <p className="text-brand-subtle text-xs mt-0.5">
                   Joined {formatDate(member.joinedDate)} · via{' '}
@@ -195,9 +197,10 @@ export default function MemberProfile() {
                   <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     {[
                       { label: 'Email',    value: member.email    || '—' },
-                      { label: 'Phone',    value: member.phone    || '—' },
-                      { label: 'Birthday', value: member.birthday ? new Date(member.birthday).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }) : '—' },
-                      { label: 'Student ID', value: formatStudentIdForDisplay(member.studentId) },
+                      { label: 'Phone',    value: formatStudentIdForDisplay(member.phone || member.studentId) },
+                      { label: 'Birthday', value: formatBirthday(member) },
+                      { label: 'Cohort',   value: member.cohort   || '—' },
+                      { label: 'Hostel',   value: member.hostel   || '—' },
                     ].map(({ label, value }) => (
                       <div key={label}>
                         <dt className="label mb-1">{label}</dt>
