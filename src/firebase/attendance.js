@@ -1,5 +1,7 @@
 import {
   collection,
+  doc,
+  runTransaction,
   addDoc,
   getDocs,
   query,
@@ -25,16 +27,33 @@ export async function hasCheckedIn(memberId, serviceId) {
 }
 
 /**
- * Log a check-in. Returns the new attendance document ID.
+ * Attendance is one row per (member, service), so the document ID *is* that pair.
+ *
+ * With a random `addDoc` id there was nothing stopping two writes for the same
+ * pair: the old flow read `hasCheckedIn()` and then wrote, and anyone who
+ * double-tapped — or tapped again on a slow connection — landed two rows and
+ * inflated the count. A load test with five simultaneous taps produced five
+ * rows. A deterministic id makes that impossible.
+ */
+export function attendanceId(memberId, serviceId) {
+  return `${serviceId}__${memberId}`
+}
+
+/**
+ * Log a check-in, idempotently. Returns { id, alreadyCheckedIn }.
+ *
+ * The transaction means concurrent taps collapse into one row and the first
+ * check-in time is the one kept, rather than being overwritten by the retry.
  */
 export async function checkIn(memberId, serviceId, isNew = false) {
-  const ref = await addDoc(collection(db, ATTENDANCE), {
-    memberId,
-    serviceId,
-    checkedInAt: serverTimestamp(),
-    isNew,
+  const ref = doc(db, ATTENDANCE, attendanceId(memberId, serviceId))
+  const alreadyCheckedIn = await runTransaction(db, async (tx) => {
+    const existing = await tx.get(ref)
+    if (existing.exists()) return true
+    tx.set(ref, { memberId, serviceId, checkedInAt: serverTimestamp(), isNew })
+    return false
   })
-  return ref.id
+  return { id: ref.id, alreadyCheckedIn }
 }
 
 /**

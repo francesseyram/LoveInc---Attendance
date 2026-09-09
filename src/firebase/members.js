@@ -1,4 +1,5 @@
 import {
+  arrayUnion,
   collection,
   doc,
   addDoc,
@@ -109,6 +110,8 @@ export function maskPhone(phone) {
   return `••• ${d.slice(-4)}`
 }
 
+const SEARCH_INDEX = ['searchIndex', 'members']
+
 let searchCache = null
 
 /** Drop the cached roster — call after a new member is created mid-session. */
@@ -116,39 +119,83 @@ export function invalidateMemberSearchCache() {
   searchCache = null
 }
 
+/** The roster squeezed into one document: id, name, class, hostel, phone key. */
+function toIndexEntry(m) {
+  const last = m.lastName && m.lastName !== '—' ? m.lastName : ''
+  return {
+    i: m.id,
+    n: `${m.firstName || ''} ${last}`.trim(),
+    c: m.cohort || '',
+    h: m.hostel || '',
+    p: m.studentId || '',
+  }
+}
+
+/** Expand an index entry back into the shape the check-in list renders. */
+function fromIndexEntry(e) {
+  const [firstName, ...rest] = (e.n || '').split(' ')
+  return {
+    id: e.i, firstName, lastName: rest.join(' '),
+    cohort: e.c, hostel: e.h, studentId: e.p,
+  }
+}
+
+/**
+ * Rebuilds `searchIndex/members` from the roster. Costs one full read, so it is
+ * an admin action, not something the check-in page does.
+ */
+export async function rebuildSearchIndex() {
+  const snap = await getDocs(collection(db, MEMBERS))
+  const entries = snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(m => !isStaffAccountStudentId(m.studentId))
+    .map(toIndexEntry)
+  await setDoc(doc(db, ...SEARCH_INDEX), { entries, count: entries.length, rebuiltAt: serverTimestamp() })
+  searchCache = entries
+  return entries.length
+}
+
+/** Atomic append, so two people registering at once cannot clobber each other. */
+async function appendToSearchIndex(member) {
+  try {
+    await updateDoc(doc(db, ...SEARCH_INDEX), { entries: arrayUnion(toIndexEntry(member)) })
+  } catch {
+    // No index yet, or the append failed — searchMembersByName rebuilds on miss.
+    searchCache = null
+  }
+}
+
 /**
  * Find members by any part of their name.
  *
- * Firestore has no substring search. Prefix range queries were tried first, but
- * they only match the START of a field, so searching "arthur" missed
- * "Caleb Akwesie Arthur" — and this roster is full of compound surnames
- * (Owusu-Marfo, Danquah-Boateng) that people search by the second half of.
- * Fetching once and filtering in JS is the same tradeoff attendance.js makes,
- * and the collection is a few hundred docs.
+ * Reads ONE document (`searchIndex/members`) rather than the whole members
+ * collection. The full-collection version cost 376 reads and ~107 KB per
+ * device; at 200 people through a door that alone exceeded Firestore's daily
+ * free read quota, and name search would have started failing mid-service.
  *
- * Note: `members` is world-readable per firestore.rules, so this downloads the
- * roster to an unauthenticated page. That exposure already exists via the public
- * API key; tightening it means restricting member reads, not changing this query.
+ * Firestore still has no substring search, so matching happens in JS — prefix
+ * queries only match the START of a field, which missed "arthur" in
+ * "Caleb Akwesie Arthur", and this roster is full of compound surnames.
  */
 export async function searchMembersByName(term) {
   const cleaned = (term || '').trim().replace(/\s+/g, ' ')
   if (cleaned.length < 2) return []
 
   if (!searchCache) {
-    const snap = await getDocs(collection(db, MEMBERS))
-    searchCache = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(m => !isStaffAccountStudentId(m.studentId))   // staff login rows aren't attendees
+    const snap = await getDoc(doc(db, ...SEARCH_INDEX))
+    if (snap.exists() && Array.isArray(snap.data().entries)) {
+      searchCache = snap.data().entries
+    } else {
+      await rebuildSearchIndex()          // first run, or the index was removed
+    }
   }
 
   const words = cleaned.toLowerCase().split(' ')
-  return searchCache
-    .filter(m => {
-      const full = `${m.firstName || ''} ${m.lastName || ''}`.toLowerCase()
-      return words.every(w => full.includes(w))
-    })
-    .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
+  return (searchCache || [])
+    .filter(e => words.every(w => (e.n || '').toLowerCase().includes(w)))
+    .sort((a, b) => (a.n || '').localeCompare(b.n || ''))
     .slice(0, 25)
+    .map(fromIndexEntry)
 }
 
 /**
@@ -158,13 +205,12 @@ export async function searchMembersByName(term) {
  */
 export async function getMemberFacets() {
   if (!searchCache) {
-    const snap = await getDocs(collection(db, MEMBERS))
-    searchCache = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(m => !isStaffAccountStudentId(m.studentId))
+    const snap = await getDoc(doc(db, ...SEARCH_INDEX))
+    if (snap.exists() && Array.isArray(snap.data().entries)) searchCache = snap.data().entries
+    else await rebuildSearchIndex()
   }
-  const cohorts = [...new Set(searchCache.map(m => m.cohort).filter(Boolean))]
-  const hostels = [...new Set(searchCache.map(m => m.hostel).filter(Boolean))]
+  const cohorts = [...new Set((searchCache || []).map(e => e.c).filter(Boolean))]
+  const hostels = [...new Set((searchCache || []).map(e => e.h).filter(Boolean))]
   return {
     cohorts: cohorts.sort().reverse(),   // newest class year first
     hostels: hostels.sort(),
@@ -187,6 +233,7 @@ export async function createMember(data) {
     joinedDate: serverTimestamp(),
     createdBy:  data.createdBy || 'self',
   })
+  await appendToSearchIndex({ id: ref.id, ...data, studentId: normalizePhoneKey(data.studentId) || data.studentId })
   return ref.id
 }
 

@@ -203,9 +203,25 @@ export default function CheckIn() {
   const handleFirstTimerSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    const { firstName, lastName, phone, birthMonth, birthDay } = firstForm
-    if (!firstName.trim() || !lastName.trim() || !phone.trim()) {
-      setError('First name, last name, and phone number are required.')
+    const { firstName, lastName, phone, email, cohort, hostel, birthMonth, birthDay } = firstForm
+    const missing = [
+      ['first name',   firstName.trim()],
+      ['last name',    lastName.trim()],
+      ['phone number', phone.trim()],
+      ['class',        cohort],
+      ['hostel',       hostel.trim()],
+      ['email',        email.trim()],
+      ['birthday',     birthMonth && birthDay],
+    ].filter(([, v]) => !v).map(([k]) => k)
+
+    if (missing.length) {
+      setError(missing.length === 1
+        ? `Your ${missing[0]} is required.`
+        : `Required: ${missing.join(', ')}.`)
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Check the email address.')
       return
     }
 
@@ -294,14 +310,12 @@ export default function CheckIn() {
     setError('')
     setSubmitting(true)
     try {
-      const dup = await hasCheckedIn(member.id, activeId)
-      if (dup) {
-        setError(`${member.firstName}, you've already checked in to this service. See you inside! 👋`)
+      const { alreadyCheckedIn } = await checkIn(member.id, activeId, false)
+      if (alreadyCheckedIn) {
+        setError(`${member.firstName}, you're already checked in to this service.`)
         setSubmitting(false)
         return
       }
-
-      await checkIn(member.id, activeId, false)
       setSuccessData({
         name:  `${member.firstName} ${member.lastName}`,
         time:  new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
@@ -483,7 +497,6 @@ export default function CheckIn() {
                       </svg>}
                 </span>
               </div>
-              <p className="text-brand-subtle text-xs mt-2">A phone number works too.</p>
 
               {error && (
                 <p className="badge-red mt-4 !block !rounded-md px-3 py-2">{error}</p>
@@ -568,18 +581,17 @@ export default function CheckIn() {
                 <div>
                   <label className="label">Phone number *</label>
                   <input type="tel" className="input tabular" placeholder="0XX XXX XXXX" value={firstForm.phone} onChange={setFF('phone')} />
-                  <p className="text-brand-subtle text-xs mt-1.5">This is how you'll check in next time.</p>
-                </div>
+                  </div>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="label">Class</label>
+                    <label className="label">Class *</label>
                     <select className="input" value={firstForm.cohort} onChange={setFF('cohort')}>
                       <option value="">Select…</option>
                       {classOptions.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="label">Hostel</label>
+                    <label className="label">Hostel *</label>
                     <input
                       type="text" className="input" list="hostel-options" placeholder="e.g. Dufie"
                       value={firstForm.hostel} onChange={setFF('hostel')}
@@ -590,11 +602,11 @@ export default function CheckIn() {
                   </div>
                 </div>
                 <div>
-                  <label className="label">Email</label>
+                  <label className="label">Email *</label>
                   <input type="email" className="input" placeholder="you@ashesi.edu.gh" value={firstForm.email} onChange={setFF('email')} />
                 </div>
                 <div>
-                  <label className="label">Birthday</label>
+                  <label className="label">Birthday *</label>
                   <div className="grid grid-cols-2 gap-4 max-w-sm">
                     <select className="input" value={firstForm.birthMonth} onChange={setFF('birthMonth')}>
                       <option value="">Month</option>
@@ -605,7 +617,6 @@ export default function CheckIn() {
                       {DAY_OPTIONS.map(d => <option key={d} value={d}>{Number(d)}</option>)}
                     </select>
                   </div>
-                  <p className="text-brand-subtle text-xs mt-1.5">Day and month only — we don't ask for the year.</p>
                 </div>
 
                 {error && <p className="badge-red !block !rounded-md px-3 py-2">{error}</p>}

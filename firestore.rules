@@ -27,6 +27,18 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated();
     }
 
+    // ─── Search index ────────────────────────────────────────────
+    // One document mirroring the roster (id, name, class, hostel, phone key)
+    // so the check-in page costs a single read instead of one per member.
+    // Write is public because self-registration at the door must append to it,
+    // exactly like `members` create — same trust level, no extra exposure.
+    // Contents are a projection of already-public member fields.
+    match /searchIndex/{docId} {
+      allow read:                   if true;
+      allow create, update:         if true;
+      allow delete:                 if isAuthenticated();
+    }
+
     // ─── App config ──────────────────────────────────────────────
     // Service types, class years, activity rule. Readable by the public
     // check-in page; only signed-in admins can change it.

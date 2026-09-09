@@ -19,9 +19,9 @@ const CONFIG_DOC = ['config', 'app']
 export const DEFAULTS = {
   serviceTypes: [
     { name: 'Thursday Service', icon: '⛪' },
-    { name: 'Special Service',        icon: '✨' },
-    { name: 'Prayer Service',         icon: '🙏' },
-    { name: 'Bible Study',    icon: '📚' },
+    { name: 'Special Service',  icon: '✨' },
+    { name: 'Prayer Service',   icon: '🙏' },
+    { name: 'Bible Study',      icon: '📚' },
   ],
   /** Extra options offered alongside the class years already present in members. */
   classOptions: ['Staff', 'Alumni', 'Visitor'],

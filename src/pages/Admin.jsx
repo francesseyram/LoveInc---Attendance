@@ -329,7 +329,11 @@ export default function Admin() {
         {/* ── Members ── */}
         {tab === 'Members' && (
           <div className="animate-fade-in">
-            <MemberTable members={analytics.memberRows} loading={membersLoading} />
+            <MemberTable
+              members={analytics.memberRows}
+              loading={membersLoading}
+              classOptions={appConfig?.classOptions || []}
+            />
           </div>
         )}
 
