@@ -5,74 +5,82 @@
 /* ─────────────────────────────────────────────────────────────────
    LOVE INC GLOBAL — design tokens
 
-   Gold is the fellowship's own colour (it's the logo) so it is constant
-   across both themes; deep verdant green is the structural partner. Light
-   mode previously switched the whole brand to violet, which made the two
-   themes look like two different products.
+   Taken from the fellowship's own materials: the crest is white on deep
+   crimson, and the service fliers set heavy condensed caps in white with a
+   single word pulled out in gold. Crimson, gold, white — nothing else.
 
    Colours are space-separated RGB channels so Tailwind opacity modifiers
    work: bg-gold/10 → background-color: rgb(var(--accent) / 0.1)
    ───────────────────────────────────────────────────────────────── */
 
-/* Dark — default. Warm near-black, not blue-black: gold sits badly on cool greys. */
+/* Dark — default. Near-black warmed toward crimson so gold sits right on it. */
 :root {
-  --accent:       201 168 76;    /* #C9A84C  heritage gold  */
-  --accent-light: 226 199 132;
-  --accent-dark:  160 130 52;
-  --accent-muted: 122 101 46;
-  --verdant:       78 158 126;   /* #4E9E7E  secondary      */
+  --accent:       201 168 76;    /* #C9A84C  flier gold     */
+  --accent-light: 228 202 134;
+  --accent-dark:  163 133 52;
+  --accent-muted: 118 97 44;
 
-  --bg:         18 20 15;        /* #12140F */
-  --surface:    25 28 21;        /* #191C15 */
-  --surface-el: 33 37 28;
-  --surface-hv: 42 47 35;
-  --border:     48 54 41;
+  --crimson:      163 18 44;     /* #A3122C  crest crimson  */
+  --crimson-light:196 44 72;
+  --crimson-deep: 116 11 31;
 
-  --text:        240 238 230;
-  --text-muted:  156 160 143;
-  --text-subtle: 118 122 106;
+  --bg:         18 13 14;        /* #120D0E */
+  --surface:    26 19 21;        /* #1A1315 */
+  --surface-el: 35 26 28;
+  --surface-hv: 45 33 36;
+  --border:     56 42 45;
+
+  --text:        250 248 246;
+  --text-muted:  170 158 158;
+  --text-subtle: 128 116 117;
+
+  --ok:          92 168 122;     /* semantic only — 'present', never brand */
 
   --btn-bg:   linear-gradient(180deg, #d8b757 0%, #C9A84C 100%);
-  --btn-text: #12140F;
+  --btn-text: #150E0F;
   --btn-ring: rgb(201 168 76 / 0.45);
 
   --shadow-accent:    0 1px 0 rgb(201 168 76 / 0.18), 0 18px 40px -24px rgb(0 0 0 / 0.9);
   --shadow-accent-sm: 0 1px 0 rgb(201 168 76 / 0.12);
-  --shadow-card:      0 1px 0 rgb(255 255 255 / 0.03), 0 24px 48px -32px rgb(0 0 0 / 0.8);
+  --shadow-card:      0 1px 0 rgb(255 255 255 / 0.03), 0 24px 48px -32px rgb(0 0 0 / 0.85);
 
-  --gradient-page: radial-gradient(1200px 600px at 12% -10%, rgb(201 168 76 / 0.07), transparent 70%);
+  --gradient-page: radial-gradient(1100px 560px at 10% -10%, rgb(163 18 44 / 0.22), transparent 68%);
   --radius:    10px;
   --radius-sm: 6px;
 }
 
-/* Light — pale sage paper. Deliberately not cream: cream + serif is the
-   look every other attendance app already has. */
+/* Light — white, the way the crest sits on a shirt. Crimson leads, gold accents. */
 .light-theme {
-  --accent:       138 106 31;    /* #8A6A1F  gold, darkened for contrast on paper */
-  --accent-light: 176 141 58;
-  --accent-dark:  102 78 22;
-  --accent-muted: 198 176 122;
-  --verdant:       14 77 60;     /* #0E4D3C */
+  --accent:       150 115 26;    /* #96731A  gold darkened for contrast on white */
+  --accent-light: 186 150 60;
+  --accent-dark:  112 85 18;
+  --accent-muted: 214 194 146;
 
-  --bg:         237 240 233;     /* #EDF0E9 */
-  --surface:    246 248 243;
-  --surface-el: 240 243 235;
-  --surface-hv: 231 236 226;
-  --border:     209 217 202;
+  --crimson:      154 16 41;     /* #9A1029 */
+  --crimson-light:186 40 68;
+  --crimson-deep: 112 10 30;
 
-  --text:        20 23 15;
-  --text-muted:  92 99 82;
-  --text-subtle: 130 137 119;
+  --bg:         252 250 249;     /* #FCFAF9 warm white */
+  --surface:    255 255 255;
+  --surface-el: 247 243 242;
+  --surface-hv: 242 236 235;
+  --border:     229 220 218;
 
-  --btn-bg:   linear-gradient(180deg, #14614b 0%, #0E4D3C 100%);
-  --btn-text: #F7FAF5;
-  --btn-ring: rgb(14 77 60 / 0.35);
+  --text:        26 18 20;
+  --text-muted:  98 86 88;
+  --text-subtle: 138 126 127;
 
-  --shadow-accent:    0 1px 2px rgb(20 23 15 / 0.08), 0 16px 32px -24px rgb(20 23 15 / 0.4);
-  --shadow-accent-sm: 0 1px 2px rgb(20 23 15 / 0.06);
-  --shadow-card:      0 1px 2px rgb(20 23 15 / 0.05), 0 20px 40px -34px rgb(20 23 15 / 0.35);
+  --ok:          32 122 74;
 
-  --gradient-page: radial-gradient(1100px 560px at 88% -12%, rgb(14 77 60 / 0.07), transparent 70%);
+  --btn-bg:   linear-gradient(180deg, #b01532 0%, #9A1029 100%);
+  --btn-text: #FFFFFF;
+  --btn-ring: rgb(154 16 41 / 0.3);
+
+  --shadow-accent:    0 1px 2px rgb(26 18 20 / 0.08), 0 16px 32px -24px rgb(26 18 20 / 0.35);
+  --shadow-accent-sm: 0 1px 2px rgb(26 18 20 / 0.06);
+  --shadow-card:      0 1px 2px rgb(26 18 20 / 0.05), 0 20px 40px -34px rgb(26 18 20 / 0.3);
+
+  --gradient-page: radial-gradient(1000px 520px at 90% -12%, rgb(154 16 41 / 0.09), transparent 68%);
 }
 
 /* ─── Base ───────────────────────────────────────────────────── */
@@ -92,12 +100,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Fraunces is variable — the wonk + soft axes are what give it warmth.
-   Without this it renders as a generic transitional serif. */
+/* Anton is the closest free match to the condensed caps on the service fliers.
+   It ships a single weight, so never set font-weight on display text. */
 .font-display, h1, h2, h3 {
-  font-family: 'Fraunces', Georgia, serif;
-  font-variation-settings: 'SOFT' 30, 'WONK' 1, 'opsz' 40;
-  letter-spacing: -0.015em;
+  font-family: 'Anton', 'Archivo', system-ui, sans-serif;
+  font-weight: 400;              /* Anton ships one weight; it is already black */
+  letter-spacing: -0.005em;
+  text-transform: uppercase;
 }
 
 ::selection { background: rgb(var(--accent) / 0.28); }
@@ -238,12 +247,14 @@ body {
     letter-spacing: 0.02em;
   }
   .badge-gold   { @apply badge; background: rgb(var(--accent) / 0.14); color: rgb(var(--accent)); box-shadow: inset 0 0 0 1px rgb(var(--accent) / 0.3); }
-  .badge-green  { @apply badge; background: rgb(var(--verdant) / 0.16); color: rgb(var(--verdant)); box-shadow: inset 0 0 0 1px rgb(var(--verdant) / 0.32); }
+  .badge-green  { @apply badge; background: rgb(var(--ok) / 0.16); color: rgb(var(--ok)); box-shadow: inset 0 0 0 1px rgb(var(--ok) / 0.32); }
   .badge-red    { @apply badge; background: rgb(224 104 90 / 0.14); color: #e0685a; box-shadow: inset 0 0 0 1px rgb(224 104 90 / 0.3); }
   .badge-blue   { @apply badge; background: rgb(96 140 190 / 0.14); color: #7ba3d0; box-shadow: inset 0 0 0 1px rgb(96 140 190 / 0.3); }
   .badge-purple { @apply badge; background: rgb(150 120 190 / 0.14); color: #a48cc9; box-shadow: inset 0 0 0 1px rgb(150 120 190 / 0.3); }
 
   .light-theme .badge-blue   { background: rgb(40 84 140 / 0.1); color: #2b5a92; }
+  .badge-crimson { @apply badge; background: rgb(var(--crimson) / 0.12); color: rgb(var(--crimson-light)); box-shadow: inset 0 0 0 1px rgb(var(--crimson) / 0.35); }
+  .light-theme .badge-crimson { color: rgb(var(--crimson)); }
   .light-theme .badge-purple { background: rgb(96 62 150 / 0.1); color: #5b3b93; }
   .light-theme .badge-red    { background: rgb(176 58 42 / 0.1); color: #a83b2c; box-shadow: inset 0 0 0 1px rgb(176 58 42 / 0.25); }
 

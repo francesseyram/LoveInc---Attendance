@@ -27,6 +27,15 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated();
     }
 
+    // ─── Service fliers ──────────────────────────────────────────
+    // One document per service, holding the flier image as a data URL.
+    // Publicly readable so the unauthenticated check-in page can show it;
+    // only signed-in admins can add or replace one.
+    match /serviceFliers/{serviceId} {
+      allow read:                   if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
     // ─── Services ────────────────────────────────────────────────
     // Services are readable by anyone (needed for check-in page to
     // show service name/date without auth). Writes restricted to

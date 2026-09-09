@@ -9,6 +9,7 @@ import ServiceCard     from '../components/ServiceCard'
 import QRModal         from '../components/QRModal'
 import NewServiceModal from '../components/NewServiceModal'
 import AttendanceAnalysis from '../components/AttendanceAnalysis'
+import FlierModal        from '../components/FlierModal'
 
 import { useAuth, useTheme } from '../App'
 import { subscribeToServiceAttendance, getAttendanceForService } from '../firebase/attendance'
@@ -88,7 +89,7 @@ function CustomTooltip({ active, payload, label, colors }) {
 
 // ─── Main ─────────────────────────────────────────────────────
 export default function Admin() {
-  const { memberRole }  = useAuth()
+  const { memberRole, user } = useAuth()
   const isSuperAdmin    = memberRole === 'superadmin'
   const chartColors     = useChartColors()
 
@@ -103,6 +104,7 @@ export default function Admin() {
   const [liveLoading,     setLiveLoading]      = useState(true)
   const [svcCounts,       setSvcCounts]        = useState({})
   const [qrService,       setQrService]        = useState(null)
+  const [flierService,    setFlierService]     = useState(null)
   const [showNewSvc,      setShowNewSvc]       = useState(false)
   const [allAttendance,   setAllAttendance]    = useState([])
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
@@ -304,6 +306,7 @@ export default function Admin() {
                     newMembersCount={svcCounts[s.id]?.newMembers ?? 0}
                     isSuperAdmin={isSuperAdmin}
                     onViewQR={setQrService}
+                    onEditFlier={setFlierService}
                     onSetActive={handleSetActive}
                     onComplete={handleComplete}
                     onDelete={handleDelete}
@@ -346,7 +349,8 @@ export default function Admin() {
         )}
       </main>
 
-      {qrService  && <QRModal        service={qrService}  onClose={() => setQrService(null)} />}
+      {qrService    && <QRModal   service={qrService}    onClose={() => setQrService(null)} />}
+      {flierService && <FlierModal service={flierService} uid={user?.uid} onClose={() => setFlierService(null)} />}
       {showNewSvc && <NewServiceModal onClose={() => setShowNewSvc(false)} onCreated={handleServiceCreated} />}
     </div>
   )

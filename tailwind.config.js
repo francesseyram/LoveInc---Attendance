@@ -18,7 +18,12 @@ export default {
           elevated: 'rgb(var(--surface-el) / <alpha-value>)',
           hover:    'rgb(var(--surface-hv) / <alpha-value>)',
         },
-        verdant: 'rgb(var(--verdant) / <alpha-value>)',
+        crimson: {
+          DEFAULT: 'rgb(var(--crimson) / <alpha-value>)',
+          light:   'rgb(var(--crimson-light) / <alpha-value>)',
+          deep:    'rgb(var(--crimson-deep) / <alpha-value>)',
+        },
+        ok: 'rgb(var(--ok) / <alpha-value>)',
         brand: {
           bg:     'rgb(var(--bg) / <alpha-value>)',
           border: 'rgb(var(--border) / <alpha-value>)',
@@ -28,8 +33,8 @@ export default {
         },
       },
       fontFamily: {
-        heading: ['Fraunces', 'Georgia', 'serif'],
-        display: ['Fraunces', 'Georgia', 'serif'],
+        heading: ['Anton', 'Archivo', 'sans-serif'],
+        display: ['Anton', 'Archivo', 'sans-serif'],
         body:    ['Archivo', 'system-ui', 'sans-serif'],
         mono:    ['"DM Mono"', 'ui-monospace', 'monospace'],
       },

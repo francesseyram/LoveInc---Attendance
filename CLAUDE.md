@@ -68,6 +68,14 @@ each collection, everything else computed in JS by `buildAnalytics()`. `INACTIVE
 (3) and `ACTIVITY_RULE_LABEL` are exported together so the rule shown in the UI can't drift
 from the rule the code applies. Rendered by [AttendanceAnalysis.jsx](src/components/AttendanceAnalysis.jsx).
 
+**Service fliers** live in their own `serviceFliers/{serviceId}` collection, not on the
+service document — `getAllServices()` runs on every admin page load and inlining image data
+would bloat it. Images are stored as data URLs (no Firebase Storage to provision), so
+`prepareFlierImage()` in [fliers.js](src/firebase/fliers.js) downscales and steps JPEG
+quality down until the doc fits under Firestore's 1 MB ceiling. Public read, authenticated
+write. The check-in page shows the flier in its left rail; with no flier it renders a
+crimson card in the crest's colours rather than an empty column.
+
 **Check-in entry points.** `/checkin?s={serviceId}` is what QR codes carry; a bare `/checkin`
 falls back to `getActiveService()`. Adding `&kiosk=1` switches to shared-device behaviour —
 the success screen auto-resets after 6s so the next person can walk up.
@@ -107,10 +115,31 @@ Admins are created by hand in the Firebase Auth console and have no `members` ro
 
 ## Styling
 
-Tailwind, with every color defined as space-separated RGB channels in CSS variables in [src/styles/index.css](src/styles/index.css) and mapped to semantic names (`gold`, `surface`, `brand-*`) in [tailwind.config.js](tailwind.config.js). This is what lets `bg-gold/10` opacity modifiers work — never hardcode hex values in components.
+The palette comes from the fellowship's own materials — the crest is white on deep
+crimson, and service fliers set heavy condensed caps in white with one word in gold.
+**Crimson `#A3122C`, gold `#C9A84C`, white. Nothing else is brand colour**; the green in
+`--ok` is semantic ("present") and must never be used decoratively. An earlier pass used
+sage/verdant and a violet light theme — both were invented rather than taken from the
+brand, and were rejected.
 
-Two themes swap those variables: dark is the `:root` default (gold `#C9A84C` on `#0A0A0A`), light is `.light-theme` on `<html>` (purple `#7C3AED`). The theme lives in `ThemeContext` in App.jsx, persists to `localStorage` under `lig-theme`, and defaults to **light**. Recharts can't read CSS variables, so Admin.jsx has a `useChartColors()` hook holding literal hex values for both themes — keep it in sync if the palette changes.
+Every colour is space-separated RGB channels in CSS variables in
+[src/styles/index.css](src/styles/index.css), mapped to semantic names (`gold`, `crimson`,
+`surface`, `brand-*`) in [tailwind.config.js](tailwind.config.js). That channel format is
+what makes `bg-gold/10` opacity modifiers work — never hardcode hex in components.
+Recharts can't read CSS variables, so `useChartColors()` in Admin.jsx mirrors them as
+literal hex; keep it in sync.
 
-Reusable classes (`.card`, `.btn-gold`, `.input`, `.badge-*`, `.data-table`, `.tab-btn`) are defined in `@layer components` in index.css. Prefer them over ad-hoc utility stacks. Fonts: Cormorant Garamond for headings (`font-display`/`font-heading`), DM Sans for body — loaded from Google Fonts in [index.html](index.html).
+Two themes swap the variables: dark is `:root` (gold on near-black warmed toward crimson),
+light is `.light-theme` on `<html>` (crimson leads, gold accents, white ground). Theme lives
+in `ThemeContext` in App.jsx, persists to `localStorage` under `lig-theme`, defaults to light.
+
+Type: **Anton** for display (`font-display`/`font-heading`) — single weight, so never set
+`font-weight` on it, and it is uppercased via CSS; **Archivo** for body; **DM Mono** for
+anything that is data — phone numbers, class years, counts, table headers, `.eyebrow`,
+`.tabular`. Reusable classes (`.shell`, `.card`, `.btn-gold`, `.input`, `.badge-*`,
+`.data-table`, `.tab-btn`, `.eyebrow`, `.rule`) live in `@layer components`.
+
+Layout uses `.shell` (1180px, consistent gutters). Check-in and login are deliberately
+asymmetric two-column splits — content centred in a narrow column reads as a login box.
 
 Logos in `public/` are theme-dependent: `global_white_png.png` on dark, `global_black.png` on light (and inside QR codes).

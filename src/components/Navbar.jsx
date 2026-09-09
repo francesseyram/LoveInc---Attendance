@@ -55,7 +55,7 @@ export default function Navbar() {
           {/* Logo + Brand */}
           <Link to="/admin" className="flex items-center gap-3 group">
             <img
-              src={isLight ? '/global_black.png' : '/global_white_png.png'}
+              src={isLight ? '/global_crimson.png' : '/global_white_png.png'}
               alt="Love Inc Global"
               className="h-9 w-auto object-contain"
               onError={(e) => { e.target.style.display = 'none' }}

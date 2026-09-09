@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getServiceById, getActiveService } from '../firebase/services'
+import { getServiceFlier } from '../firebase/fliers'
 import {
   getMemberByStudentId, createMember, studentIdExists,
   normalizePhoneKey, searchMembersByName, maskPhone, invalidateMemberSearchCache,
@@ -57,7 +58,7 @@ function Masthead() {
       <div className="shell flex items-center justify-between py-4">
         <div className="flex items-center gap-3">
           <img
-            src={theme === 'light' ? '/global_black.png' : '/global_white_png.png'}
+            src={theme === 'light' ? '/global_crimson.png' : '/global_white_png.png'}
             alt=""
             className="h-8 w-auto object-contain"
             onError={(e) => { e.target.style.display = 'none' }}
@@ -71,6 +72,17 @@ function Masthead() {
       </div>
     </header>
   )
+}
+
+/** 'Wed 10 Sep · 7:00 pm' — never the raw ISO string the form stores. */
+function serviceWhen(service) {
+  if (!service?.date) return ''
+  const d = new Date(`${service.date}T${service.time || '00:00'}`)
+  if (Number.isNaN(d.getTime())) return service.date
+  const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+  if (!service.time) return day
+  const time = d.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true })
+  return `${day} · ${time.replace(' ', '')}`
 }
 
 /** Roster rows use '—' as a placeholder surname; never show that to the person. */
@@ -89,6 +101,24 @@ function Highlight({ text, term }) {
     words.includes(part.toLowerCase())
       ? <mark key={i} className="bg-gold/25 text-brand-text rounded-[3px] px-0.5">{part}</mark>
       : <span key={i}>{part}</span>,
+  )
+}
+
+/**
+ * Page chrome. Declared at module scope on purpose — defining a component inside
+ * CheckIn() gives it a fresh identity on every render, which makes React unmount
+ * and remount the entire subtree (flier reloads, input loses state) on each keystroke.
+ */
+function Frame({ children }) {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Masthead />
+      <main className="shell flex-1 py-10 sm:py-14">{children}</main>
+      <footer className="shell py-6">
+        <div className="rule mb-3" />
+        <p className="eyebrow">Love Inc Global · Attendance</p>
+      </footer>
+    </div>
   )
 }
 
@@ -111,7 +141,7 @@ export default function CheckIn() {
   const [service,      setService]      = useState(null)
   const [pageLoading,  setPageLoading]  = useState(true)
   const [notFound,     setNotFound]     = useState(false)
-  const [step,         setStep]         = useState('choose') // 'choose' | 'first' | 'returning' | 'success'
+  const [step,         setStep]         = useState('search') // 'choose' | 'first' | 'returning' | 'success'
   const [successData,  setSuccessData]  = useState(null)
   const [error,        setError]        = useState('')
   const [submitting,   setSubmitting]   = useState(false)
@@ -123,6 +153,7 @@ export default function CheckIn() {
   const [searchTerm, setSearchTerm] = useState('')
   const [results,    setResults]    = useState(null)   // null = not searched yet
   const [searching,  setSearching]  = useState(false)
+  const [flier,      setFlier]      = useState(null)
 
   useEffect(() => {
     // QR codes carry ?s={serviceId}. A bare /checkin falls back to the active
@@ -138,6 +169,17 @@ export default function CheckIn() {
   }, [serviceId])
 
   const activeId = service?.id
+
+  // The flier lives in its own collection, so this is one small extra read
+  // for the one service being shown.
+  useEffect(() => {
+    if (!activeId) return
+    let alive = true
+    getServiceFlier(activeId)
+      .then(f => { if (alive) setFlier(f) })
+      .catch(() => {})   // a missing flier is normal, not an error worth showing
+    return () => { alive = false }
+  }, [activeId])
 
   const setFF = (field) => (e) => setFirstForm(p => ({ ...p, [field]: e.target.value }))
 
@@ -259,7 +301,7 @@ export default function CheckIn() {
 
   /** Wipe every transient bit of state so the next person starts clean. */
   const resetToStart = () => {
-    setStep('choose'); setError(''); setSuccessData(null)
+    setStep('search'); setError(''); setSuccessData(null)
     setSearchTerm(''); setResults(null)
     setFirstForm({ firstName: '', lastName: '', phone: '', email: '',
                    birthMonth: '', birthDay: '', cohort: '', hostel: '' })
@@ -273,17 +315,6 @@ export default function CheckIn() {
   }, [step, kioskMode])
 
   // ─── Render states ─────────────────────────────────────────
-
-  const Frame = ({ children }) => (
-    <div className="min-h-screen flex flex-col">
-      <Masthead />
-      <main className="shell flex-1 py-10 sm:py-14">{children}</main>
-      <footer className="shell py-6">
-        <div className="rule mb-3" />
-        <p className="eyebrow">Love Inc Global · Attendance</p>
-      </footer>
-    </div>
-  )
 
   if (pageLoading) {
     return <Frame><div className="py-24"><Spinner /></div></Frame>
@@ -371,58 +402,49 @@ export default function CheckIn() {
 
   return (
     <Frame>
-      <div className="grid lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-10 lg:gap-16 items-start">
+      <div className="grid lg:grid-cols-[minmax(0,390px)_minmax(0,1fr)] gap-10 lg:gap-14 items-start">
 
-        {/* ── Left rail: what you're checking into ── */}
-        <aside className="animate-fade-in lg:sticky lg:top-14">
-          <p className="eyebrow mb-3">{service?.type || 'Service'}</p>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-brand-text leading-tight">
-            {service?.name}
-          </h1>
-          <div className="gold-divider mt-5 mb-5" />
-          <dl className="space-y-3">
-            <div>
-              <dt className="eyebrow mb-0.5">Date</dt>
-              <dd className="text-brand-text text-sm tabular">{service?.date || '—'}</dd>
-            </div>
-            {service?.time && (
-              <div>
-                <dt className="eyebrow mb-0.5">Starts</dt>
-                <dd className="text-brand-text text-sm tabular">{service.time}</dd>
+        {/* ── Left rail: the flier, or a designed stand-in ── */}
+        <aside className="animate-fade-in lg:sticky lg:top-10">
+          {flier?.dataUrl ? (
+            <figure className="m-0">
+              <img
+                src={flier.dataUrl}
+                alt={`Flier for ${service?.name || 'this service'}`}
+                className="w-full h-auto max-h-[52vh] object-contain mx-auto rounded-lg border border-brand-border
+                           shadow-[var(--shadow-card)] lg:max-h-none lg:object-cover"
+              />
+              <figcaption className="mt-4">
+                <p className="eyebrow mb-1.5">{service?.type || 'Service'}</p>
+                <p className="font-display text-xl text-brand-text leading-tight">{service?.name}</p>
+                <p className="text-brand-muted text-sm mt-1 tabular">{serviceWhen(service)}</p>
+              </figcaption>
+            </figure>
+          ) : (
+            /* No flier uploaded — a crimson card in the crest's own colours,
+               never an empty column. */
+            <div className="rounded-lg overflow-hidden border border-brand-border shadow-[var(--shadow-card)]">
+              <div className="bg-crimson px-6 py-10 text-white">
+                <p className="eyebrow !text-white/70 mb-3">{service?.type || 'Service'}</p>
+                <p className="font-display text-4xl leading-[0.95]">{service?.name}</p>
+                <div className="h-0.5 w-11 bg-gold rounded-sm mt-5" />
               </div>
-            )}
-          </dl>
-          {kioskMode && (
-            <p className="badge-gold mt-6">Door mode</p>
+              <dl className="bg-surface px-6 py-5 space-y-3">
+                <div>
+                  <dt className="eyebrow mb-0.5">When</dt>
+                  <dd className="text-brand-text text-sm tabular">{serviceWhen(service) || '—'}</dd>
+                </div>
+              </dl>
+            </div>
           )}
+          {kioskMode && <p className="badge-gold mt-5">Door mode</p>}
         </aside>
 
         {/* ── Right: the actual job ── */}
         <section className="min-w-0">
-          {step === 'choose' && (
-            <div className="animate-slide-up max-w-xl">
-              <h2 className="font-display text-2xl font-semibold text-brand-text mb-2">Mark yourself present</h2>
-              <p className="text-brand-muted mb-7 leading-relaxed">
-                Search your name to check in. If you've never been before, register first —
-                it takes about twenty seconds.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <button type="button" onClick={() => { setStep('search'); setError('') }} className="btn-gold px-6 py-3">
-                  Find my name
-                </button>
-                <button type="button" onClick={() => { setStep('first'); setError('') }} className="btn-ghost px-6 py-3">
-                  I'm new here
-                </button>
-              </div>
-            </div>
-          )}
-
           {step === 'search' && (
             <div className="animate-slide-up max-w-xl">
-              <h2 className="font-display text-2xl font-semibold text-brand-text mb-2">Find your name</h2>
-              <p className="text-brand-muted mb-6 leading-relaxed">
-                Start typing — matches appear as you go. Tap yourself to check in.
-              </p>
+              <h2 className="font-display text-2xl font-semibold text-brand-text mb-6">Find your name</h2>
 
               <label className="label" htmlFor="name-search">Your name</label>
               <div className="relative">
@@ -498,17 +520,23 @@ export default function CheckIn() {
                 </div>
               )}
 
-              <button type="button" onClick={resetToStart} className="btn-ghost mt-7">Back</button>
+              <div className="rule my-8" />
+              <p className="text-brand-muted text-sm">
+                First time at Love Inc?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setStep('first'); setError('') }}
+                  className="text-gold font-medium underline underline-offset-4 hover:no-underline"
+                >
+                  Register instead
+                </button>
+              </p>
             </div>
           )}
 
           {step === 'first' && (
             <div className="animate-slide-up max-w-2xl">
-              <h2 className="font-display text-2xl font-semibold text-brand-text mb-2">Welcome — tell us who you are</h2>
-              <p className="text-brand-muted mb-7 leading-relaxed">
-                Only your name and phone number are required. Everything else helps us
-                keep in touch.
-              </p>
+              <h2 className="font-display text-2xl font-semibold text-brand-text mb-7">Welcome — tell us who you are</h2>
               <form onSubmit={handleFirstTimerSubmit} className="space-y-5">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>

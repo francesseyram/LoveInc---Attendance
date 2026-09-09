@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { signIn } from '../firebase/auth'
-import { useAuth } from '../App'
+import { useAuth, useTheme } from '../App'
 
 export default function Login() {
+  const { theme } = useTheme()
   const navigate    = useNavigate()
   const { user, authLoading } = useAuth()
 
@@ -57,6 +58,12 @@ export default function Login() {
 
         {/* Left: who this is for */}
         <div className="animate-fade-in">
+          <img
+            src={theme === 'light' ? '/global_crimson.png' : '/global_white_png.png'}
+            alt="Love Inc Global"
+            className="h-20 w-auto object-contain mb-7"
+            onError={(e) => { e.target.style.display = 'none' }}
+          />
           <p className="eyebrow mb-4">Admin portal</p>
           <h1 className="font-display text-4xl sm:text-5xl font-semibold text-brand-text leading-[1.05] mb-5">
             Who came,<br />and who we<br />haven't seen.

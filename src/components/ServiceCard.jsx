@@ -17,7 +17,7 @@ function formatDate(dateStr) {
 /**
  * Props:
  *   service, attendanceCount, newMembersCount
- *   onViewQR, onSetActive, onComplete, onDelete
+ *   onViewQR, onEditFlier, onSetActive, onComplete, onDelete
  *   isSuperAdmin — show delete flow
  */
 export default function ServiceCard({
@@ -25,6 +25,7 @@ export default function ServiceCard({
   attendanceCount = 0,
   newMembersCount = 0,
   onViewQR,
+  onEditFlier,
   onSetActive,
   onComplete,
   onDelete,
@@ -108,6 +109,13 @@ export default function ServiceCard({
               Set Active
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => onEditFlier?.(service)}
+            className="flex-1 min-w-[140px] btn-ghost text-sm py-2"
+          >
+            Flier
+          </button>
           {isActive && (
             <button
               type="button"
