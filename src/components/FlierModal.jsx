@@ -21,7 +21,7 @@ export default function FlierModal({ service, uid, onClose, onSaved }) {
         if (!alive) return
         if (f) { setPreview(f); setExisting(true) }
       })
-      .catch(() => setError('Could not load the current flier.'))
+      .catch(() => { if (alive) setError('Could not load the current flier.') })
       .finally(() => alive && setLoading(false))
     return () => { alive = false }
   }, [service.id])

@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts'
 import StatsCard from './StatsCard'
-import { ACTIVITY_RULE_LABEL, formatLastSeen } from '../firebase/analytics'
+import { formatLastSeen } from '../firebase/analytics'
 
 /**
  * The attendance picture for fellowship leads: how the trend is moving, who has
@@ -74,7 +74,7 @@ function MemberList({ rows, emptyText }) {
 
 export default function AttendanceAnalysis({ analytics, chartColors }) {
   const [listTab, setListTab] = useState('inactive')
-  const { trend, totals, lists, recentWindow } = analytics
+  const { trend, totals, lists, recentWindow, activityRule } = analytics
 
   if (!totals.servicesHeld) {
     return (
@@ -146,7 +146,7 @@ export default function AttendanceAnalysis({ analytics, chartColors }) {
           <div>
             <h3 className="font-display text-xl font-semibold text-brand-text">Member Activity</h3>
             <p className="text-brand-muted text-xs mt-0.5">
-              {ACTIVITY_RULE_LABEL}
+              {activityRule}
               {recentWindow.length > 0 && (
                 <span className="text-brand-subtle">
                   {' '}({recentWindow.map(s => s.name).join(', ')})

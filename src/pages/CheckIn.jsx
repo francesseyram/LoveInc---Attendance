@@ -5,7 +5,9 @@ import { getServiceFlier } from '../firebase/fliers'
 import {
   getMemberByStudentId, createMember, studentIdExists,
   normalizePhoneKey, searchMembersByName, maskPhone, invalidateMemberSearchCache,
+  getMemberFacets,
 } from '../firebase/members'
+import { getAppConfig } from '../firebase/settings'
 import { checkIn, hasCheckedIn } from '../firebase/attendance'
 import { useTheme } from '../App'
 
@@ -128,7 +130,6 @@ const MONTH_OPTIONS = [
 ]
 const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'))
 // Ashesi class years. Matches the `cohort` values imported from the church roster.
-const CLASS_OPTIONS = ['C2026','C2027','C2028','C2029','C2030','Staff','Alumni','Visitor']
 
 // ─── Main Component ──────────────────────────────────────────
 export default function CheckIn() {
@@ -154,6 +155,8 @@ export default function CheckIn() {
   const [results,    setResults]    = useState(null)   // null = not searched yet
   const [searching,  setSearching]  = useState(false)
   const [flier,      setFlier]      = useState(null)
+  const [classOptions, setClassOptions] = useState([])
+  const [hostelOptions, setHostelOptions] = useState([])
 
   useEffect(() => {
     // QR codes carry ?s={serviceId}. A bare /checkin falls back to the active
@@ -169,6 +172,20 @@ export default function CheckIn() {
   }, [serviceId])
 
   const activeId = service?.id
+
+  // Class years come from the roster itself, plus any extra options in config —
+  // so a new cohort appears without anyone editing code.
+  useEffect(() => {
+    let alive = true
+    Promise.all([getAppConfig(), getMemberFacets()])
+      .then(([cfg, facets]) => {
+        if (!alive) return
+        setClassOptions([...new Set([...facets.cohorts, ...(cfg.classOptions || [])])])
+        setHostelOptions(facets.hostels)
+      })
+      .catch(() => {})   // the form still works with free text if this fails
+    return () => { alive = false }
+  }, [])
 
   // The flier lives in its own collection, so this is one small extra read
   // for the one service being shown.
@@ -558,12 +575,18 @@ export default function CheckIn() {
                     <label className="label">Class</label>
                     <select className="input" value={firstForm.cohort} onChange={setFF('cohort')}>
                       <option value="">Select…</option>
-                      {CLASS_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                      {classOptions.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="label">Hostel</label>
-                    <input type="text" className="input" placeholder="e.g. Dufie" value={firstForm.hostel} onChange={setFF('hostel')} />
+                    <input
+                      type="text" className="input" list="hostel-options" placeholder="e.g. Dufie"
+                      value={firstForm.hostel} onChange={setFF('hostel')}
+                    />
+                    <datalist id="hostel-options">
+                      {hostelOptions.map(h => <option key={h} value={h} />)}
+                    </datalist>
                   </div>
                 </div>
                 <div>

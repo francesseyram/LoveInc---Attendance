@@ -1,14 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getAppConfig, serviceTypeNames } from '../firebase/settings'
 import { createService } from '../firebase/services'
 import { useAuth } from '../App'
-
-const SERVICE_TYPES = [
-  'Sunday Service',
-  'Midweek',
-  'Special',
-  'Prayer',
-  'Bible Study',
-]
 
 const today = new Date().toISOString().split('T')[0]
 const nowTime = new Date().toTimeString().slice(0, 5)
@@ -19,16 +12,27 @@ const nowTime = new Date().toTimeString().slice(0, 5)
  *   onCreated - callback(newServiceId) after successful creation
  */
 export default function NewServiceModal({ onClose, onCreated }) {
+  const [serviceTypes, setServiceTypes] = useState([])
+
   const { user } = useAuth()
 
   const [form, setForm] = useState({
     name: '',
     date: today,
     time: nowTime,
-    type: 'Sunday Service',
+    type: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+
+  useEffect(() => {
+    getAppConfig().then(c => {
+      const names = serviceTypeNames(c)
+      setServiceTypes(names)
+      setForm(f => (f.type ? f : { ...f, type: names[0] || '' }))
+    })
+  }, [])
+
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }))
 
@@ -88,7 +92,7 @@ export default function NewServiceModal({ onClose, onCreated }) {
           <div>
             <label className="label">Service Type</label>
             <select className="input" value={form.type} onChange={set('type')}>
-              {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {serviceTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
 

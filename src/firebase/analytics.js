@@ -9,12 +9,17 @@ import { db } from './config'
  * free of composite indexes, and these collections are small (hundreds of docs).
  */
 
-/** How many recent services a member can miss before they count as inactive. */
-export const INACTIVE_AFTER_MISSED_SERVICES = 3
+/**
+ * Fallback only — the real value lives in Firestore at `config/app`
+ * (inactiveAfterMissedServices) so leads can tune it without a redeploy.
+ * This constant exists so analytics still works if that read fails.
+ */
+export const DEFAULT_INACTIVE_AFTER_MISSED_SERVICES = 3
 
 /** Plain-English version of the rule, so the UI and the logic can't drift apart. */
-export const ACTIVITY_RULE_LABEL =
-  `Inactive = no check-in in the last ${INACTIVE_AFTER_MISSED_SERVICES} services`
+export function activityRuleLabel(n) {
+  return `Inactive = no check-in in the last ${n} service${n === 1 ? '' : 's'}`
+}
 
 /** One-shot read of every attendance record. Admin-only — the public page never calls this. */
 export async function getAllAttendance() {
@@ -36,7 +41,13 @@ export function heldServices(services) {
  * The whole analysis in one pass.
  * Returns per-service trend rows, per-member activity, and fellowship-level totals.
  */
-export function buildAnalytics({ members = [], services = [], attendance = [] }) {
+export function buildAnalytics({
+  members = [], services = [], attendance = [],
+  inactiveAfterMissedServices = DEFAULT_INACTIVE_AFTER_MISSED_SERVICES,
+} = {}) {
+  const windowSize = Number.isFinite(inactiveAfterMissedServices) && inactiveAfterMissedServices > 0
+    ? inactiveAfterMissedServices
+    : DEFAULT_INACTIVE_AFTER_MISSED_SERVICES
   const held = heldServices(services)
   const heldIds = new Set(held.map(s => s.id))
   const attendees = members.filter(m => !String(m.studentId || '').startsWith('auth-'))
@@ -69,7 +80,7 @@ export function buildAnalytics({ members = [], services = [], attendance = [] })
   })
 
   // ─── the recent window that defines active vs inactive ──────
-  const recentWindow = held.slice(-INACTIVE_AFTER_MISSED_SERVICES)
+  const recentWindow = held.slice(-windowSize)
   const recentIds = new Set(recentWindow.map(s => s.id))
 
   const serviceById = new Map(held.map(s => [s.id, s]))
@@ -113,6 +124,8 @@ export function buildAnalytics({ members = [], services = [], attendance = [] })
     trend,
     memberRows,
     recentWindow,
+    inactiveAfterMissedServices: windowSize,
+    activityRule: activityRuleLabel(windowSize),
     totals: {
       members: attendees.length,
       servicesHeld: held.length,

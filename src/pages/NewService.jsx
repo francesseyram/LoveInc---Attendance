@@ -1,15 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getAppConfig, serviceTypeNames } from '../firebase/settings'
 import { useNavigate } from 'react-router-dom'
 import { createService } from '../firebase/services'
 import { useAuth } from '../App'
 import Navbar from '../components/Navbar'
 import QRModal from '../components/QRModal'
 
-const SERVICE_TYPES = ['Sunday Service', 'Midweek', 'Special', 'Prayer', 'Bible Study']
 const today   = new Date().toISOString().split('T')[0]
 const nowTime = new Date().toTimeString().slice(0, 5)
 
 export default function NewService() {
+  const [serviceTypes, setServiceTypes] = useState([])
+
+  useEffect(() => {
+    getAppConfig().then(c => {
+      const names = serviceTypeNames(c)
+      setServiceTypes(names)
+      setForm(f => (f.type ? f : { ...f, type: names[0] || '' }))
+    })
+  }, [])
+
   const { user }   = useAuth()
   const navigate   = useNavigate()
 
@@ -17,7 +27,7 @@ export default function NewService() {
     name: '',
     date: today,
     time: nowTime,
-    type: 'Sunday Service',
+    type: '',
   })
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
@@ -90,7 +100,7 @@ export default function NewService() {
             <div>
               <label className="label">Service Type</label>
               <select className="input" value={form.type} onChange={set('type')}>
-                {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {serviceTypes.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
 

@@ -1,12 +1,5 @@
 import { useState, useEffect } from 'react'
-
-const SERVICE_TYPE_ICONS = {
-  'Sunday Service': '⛪',
-  'Midweek':        '📖',
-  'Special':        '✨',
-  'Prayer':         '🙏',
-  'Bible Study':    '📚',
-}
+import { serviceTypeIcon } from '../firebase/settings'
 
 function formatDate(dateStr) {
   if (!dateStr) return '—'
@@ -26,12 +19,13 @@ export default function ServiceCard({
   newMembersCount = 0,
   onViewQR,
   onEditFlier,
+  config,
   onSetActive,
   onComplete,
   onDelete,
   isSuperAdmin = false,
 }) {
-  const icon = SERVICE_TYPE_ICONS[service.type] || ''
+  const icon = serviceTypeIcon(config, service.type)
   const isCompleted = service.isCompleted === true
   const isActive = service.isActive === true && !isCompleted
 

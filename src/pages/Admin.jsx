@@ -10,14 +10,16 @@ import QRModal         from '../components/QRModal'
 import NewServiceModal from '../components/NewServiceModal'
 import AttendanceAnalysis from '../components/AttendanceAnalysis'
 import FlierModal        from '../components/FlierModal'
+import AppSettings       from '../components/AppSettings'
 
 import { useAuth, useTheme } from '../App'
 import { subscribeToServiceAttendance, getAttendanceForService } from '../firebase/attendance'
 import { getAllServices, getActiveService, setActiveService, completeService, deleteService } from '../firebase/services'
 import { getAllMembers, getMemberById }                           from '../firebase/members'
 import { getAllAttendance, buildAnalytics }                        from '../firebase/analytics'
+import { getAppConfig }                                           from '../firebase/settings'
 
-const TABS = ['Live', 'Services', 'Members', 'Stats']
+const TABS = ['Live', 'Services', 'Members', 'Stats', 'Settings']
 
 // ─── Theme-aware chart colors ─────────────────────────────────
 function useChartColors() {
@@ -105,6 +107,7 @@ export default function Admin() {
   const [svcCounts,       setSvcCounts]        = useState({})
   const [qrService,       setQrService]        = useState(null)
   const [flierService,    setFlierService]     = useState(null)
+  const [appConfig,       setAppConfig]        = useState(null)
   const [showNewSvc,      setShowNewSvc]       = useState(false)
   const [allAttendance,   setAllAttendance]    = useState([])
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
@@ -139,13 +142,18 @@ export default function Admin() {
     finally { setAnalyticsLoading(false) }
   }, [])
 
+  useEffect(() => { getAppConfig().then(setAppConfig) }, [])
+
   useEffect(() => { loadServices(); loadMembers(); loadAttendance() },
     [loadServices, loadMembers, loadAttendance])
 
   // Recomputed in JS rather than queried — see src/firebase/analytics.js.
   const analytics = useMemo(
-    () => buildAnalytics({ members: allMembers, services, attendance: allAttendance }),
-    [allMembers, services, allAttendance],
+    () => buildAnalytics({
+      members: allMembers, services, attendance: allAttendance,
+      inactiveAfterMissedServices: appConfig?.inactiveAfterMissedServices,
+    }),
+    [allMembers, services, allAttendance, appConfig],
   )
 
   // ─── Real-time attendance ───────────────────────────────────
@@ -307,6 +315,7 @@ export default function Admin() {
                     isSuperAdmin={isSuperAdmin}
                     onViewQR={setQrService}
                     onEditFlier={setFlierService}
+                    config={appConfig}
                     onSetActive={handleSetActive}
                     onComplete={handleComplete}
                     onDelete={handleDelete}
@@ -345,6 +354,13 @@ export default function Admin() {
             {analyticsLoading
               ? <div className="card text-center py-16 text-brand-muted text-sm">Crunching attendance…</div>
               : <AttendanceAnalysis analytics={analytics} chartColors={chartColors} />}
+          </div>
+        )}
+
+        {/* ── Settings ── */}
+        {tab === 'Settings' && (
+          <div className="animate-fade-in">
+            <AppSettings canEdit={memberRole === 'admin' || memberRole === 'superadmin'} />
           </div>
         )}
       </main>

@@ -151,6 +151,26 @@ export async function searchMembersByName(term) {
     .slice(0, 25)
 }
 
+/**
+ * Distinct class years and hostels actually present in the roster.
+ * Reuses the search cache, so this costs no extra read, and means the class
+ * list maintains itself as new cohorts arrive instead of being edited in code.
+ */
+export async function getMemberFacets() {
+  if (!searchCache) {
+    const snap = await getDocs(collection(db, MEMBERS))
+    searchCache = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => !isStaffAccountStudentId(m.studentId))
+  }
+  const cohorts = [...new Set(searchCache.map(m => m.cohort).filter(Boolean))]
+  const hostels = [...new Set(searchCache.map(m => m.hostel).filter(Boolean))]
+  return {
+    cohorts: cohorts.sort().reverse(),   // newest class year first
+    hostels: hostels.sort(),
+  }
+}
+
 /** Create a new member document. Returns the new document ID. */
 export async function createMember(data) {
   const ref = await addDoc(collection(db, MEMBERS), {
