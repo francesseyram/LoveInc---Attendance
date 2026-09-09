@@ -240,7 +240,7 @@ export default function Admin() {
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-brand-border mb-6 flex gap-0 overflow-x-auto">
+        <div className="tab-row mb-8">
           {TABS.map(t => (
             <button key={t} onClick={() => setTab(t)} className={tab === t ? 'tab-btn-active' : 'tab-btn'}>
               {t}

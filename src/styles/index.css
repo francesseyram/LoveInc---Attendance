@@ -44,6 +44,8 @@
   --shadow-accent-sm: 0 1px 0 rgb(201 168 76 / 0.12);
   --shadow-card:      0 1px 0 rgb(255 255 255 / 0.03), 0 24px 48px -32px rgb(0 0 0 / 0.85);
 
+  --tab-active: rgb(var(--accent));
+
   --gradient-page: radial-gradient(1100px 560px at 10% -10%, rgb(163 18 44 / 0.22), transparent 68%);
   --radius:    10px;
   --radius-sm: 6px;
@@ -79,6 +81,8 @@
   --shadow-accent:    0 1px 2px rgb(26 18 20 / 0.08), 0 16px 32px -24px rgb(26 18 20 / 0.35);
   --shadow-accent-sm: 0 1px 2px rgb(26 18 20 / 0.06);
   --shadow-card:      0 1px 2px rgb(26 18 20 / 0.05), 0 20px 40px -34px rgb(26 18 20 / 0.3);
+
+  --tab-active: rgb(var(--crimson));
 
   --gradient-page: radial-gradient(1000px 520px at 90% -12%, rgb(154 16 41 / 0.09), transparent 68%);
 }
@@ -225,19 +229,56 @@ body {
     letter-spacing: 0.14em;
   }
 
-  /* ── Tabs ── */
+  /* ── Tabs — a rule under the live one; a tinted box reads as a stray highlight ── */
   .tab-btn {
-    @apply px-4 py-2 text-sm font-medium transition-all duration-150;
-    color: rgb(var(--text-muted));
-    border-radius: var(--radius-sm);
-    background: transparent;
+    @apply relative px-1 pb-4 pt-2 text-[0.95rem] font-medium transition-colors duration-150 bg-transparent;
+    color: rgb(var(--text-subtle));
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;              /* sit the rule on the row's hairline */
   }
-  .tab-btn:hover { color: rgb(var(--text)); background: rgb(var(--surface-hv)); }
+  .tab-btn:hover { color: rgb(var(--text)); border-bottom-color: rgb(var(--border)); }
   .tab-btn-active {
-    color: rgb(var(--accent));
-    background: rgb(var(--accent) / 0.1);
-    box-shadow: inset 0 0 0 1px rgb(var(--accent) / 0.28);
+    @apply relative px-1 pb-4 pt-2 text-[0.95rem] font-semibold bg-transparent;
+    color: rgb(var(--text));
+    border-bottom: 2px solid var(--tab-active);
+    margin-bottom: -1px;
   }
+  .tab-row {
+    @apply flex items-end gap-8 sm:gap-12 overflow-x-auto;
+    border-bottom: 1px solid rgb(var(--border));
+  }
+
+  /* ── App bar: quiet. The admin is a dense tool; the data should lead and the
+        brand should sit in the crest and the active-tab rule, not a slab of red. ── */
+  .brand-band {
+    background: rgb(var(--surface) / 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgb(var(--border));
+  }
+  .brand-band .band-link {
+    @apply relative text-[0.95rem] font-medium px-1 py-1.5 transition-colors;
+    color: rgb(var(--text-subtle));
+    border-bottom: 2px solid transparent;
+  }
+  .brand-band .band-link:hover { color: rgb(var(--text)); }
+  .brand-band .band-link-active { color: rgb(var(--text)); border-bottom-color: var(--tab-active); }
+  .brand-band .band-btn {
+    @apply text-sm font-medium px-4 py-2 transition-colors;
+    border: 1px solid rgb(var(--border));
+    border-radius: var(--radius-sm);
+    color: rgb(var(--text-muted));
+  }
+  .brand-band .band-btn:hover {
+    background: rgb(var(--surface-hv));
+    border-color: rgb(var(--accent) / 0.5);
+    color: rgb(var(--text));
+  }
+  .brand-band .band-icon {
+    @apply w-9 h-9 flex items-center justify-center transition-colors;
+    border-radius: var(--radius-sm);
+    color: rgb(var(--text-muted));
+  }
+  .brand-band .band-icon:hover { background: rgb(var(--surface-hv)); color: rgb(var(--accent)); }
 
   /* ── Badges ── */
   .badge {

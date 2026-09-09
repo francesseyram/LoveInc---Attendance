@@ -57,18 +57,21 @@ export default function FlierModal({ service, uid, onClose, onSaved }) {
     } catch (err) {
       console.error(err)
       setError('Could not save the flier. Check your connection and try again.')
+    } finally {
       setBusy(false)
     }
   }
 
   const remove = async () => {
     setBusy(true)
+    setError('')
     try {
       await removeServiceFlier(service.id)
       onSaved?.()
       onClose()
     } catch {
       setError('Could not remove the flier.')
+    } finally {
       setBusy(false)
     }
   }

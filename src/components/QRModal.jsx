@@ -55,7 +55,7 @@ export default function QRModal({ service, onClose }) {
               eyeRadius={6}
               fgColor="#0A0A0A"
               bgColor="#FFFFFF"
-              logoImage="/global_black.png"
+              logoImage="/global_crimson.png"
               logoWidth={48}
               logoHeight={48}
               logoPaddingStyle="circle"

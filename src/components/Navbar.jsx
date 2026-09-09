@@ -39,60 +39,40 @@ export default function Navbar() {
   const isLight = theme === 'light'
 
   return (
-    <header className="sticky top-0 z-50 backdrop-blur-md border-b border-brand-border"
-      style={{ backgroundColor: isLight ? 'rgba(255,255,255,0.92)' : 'rgba(10,10,10,0.92)' }}
-    >
-      {/* Gradient accent line at top (light mode) */}
-      {isLight && (
-        <div className="h-0.5 w-full" style={{
-          background: 'linear-gradient(90deg, #7C3AED 0%, #A855F7 50%, #C084FC 100%)'
-        }} />
-      )}
+    /* Quiet bar. Brand shows up in the crest and the active-tab rule only. */
+    <header className="brand-band sticky top-0 z-50">
+      <div className="w-full px-5 sm:px-7 lg:px-9">
+        <div className="flex items-center justify-between h-[4.5rem] gap-6 sm:gap-10">
 
-      <div className="shell">
-        <div className="flex items-center justify-between h-16">
-
-          {/* Logo + Brand */}
-          <Link to="/admin" className="flex items-center gap-3 group">
+          <Link to="/admin" className="flex items-center gap-3 shrink-0">
             <img
               src={isLight ? '/global_crimson.png' : '/global_white_png.png'}
-              alt="Love Inc Global"
+              alt=""
               className="h-9 w-auto object-contain"
               onError={(e) => { e.target.style.display = 'none' }}
             />
-            <div>
-              <p className="font-display text-gold text-lg font-semibold leading-none tracking-wide">
-                Love Inc Global
-              </p>
-              <p className="text-brand-subtle text-xs leading-none mt-0.5">
-                Attendance Portal
-              </p>
+            <div className="hidden sm:block leading-none">
+              <p className="font-display text-lg leading-none text-brand-text">Love Inc Global</p>
+              <p className="eyebrow mt-1">Attendance</p>
             </div>
           </Link>
 
-          {/* Nav links */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-8 lg:gap-10">
             {navLinks.map(({ to, label }) => (
               <Link
                 key={to}
                 to={to}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  location.pathname === to
-                    ? 'text-gold bg-gold/10'
-                    : 'text-brand-muted hover:text-brand-text hover:bg-surface'
-                }`}
+                className={location.pathname === to ? 'band-link band-link-active' : 'band-link'}
               >
                 {label}
               </Link>
             ))}
           </nav>
 
-          {/* Right: theme toggle + user + sign out */}
-          <div className="flex items-center gap-2">
-            {/* Theme toggle */}
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             <button
               onClick={toggleTheme}
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-brand-muted hover:text-gold hover:bg-gold/10 transition-all duration-200"
+              className="band-icon"
               aria-label={isLight ? 'Switch to dark mode' : 'Switch to light mode'}
               title={isLight ? 'Dark mode' : 'Light mode'}
             >
@@ -100,14 +80,12 @@ export default function Navbar() {
             </button>
 
             {user && (
-              <span className="hidden sm:block text-brand-subtle text-xs truncate max-w-[180px]">
+              <span className="hidden lg:block text-brand-subtle text-xs truncate max-w-[180px]">
                 {user.email}
               </span>
             )}
 
-            <button onClick={handleSignOut} className="btn-ghost text-sm py-2 px-4">
-              Sign out
-            </button>
+            <button onClick={handleSignOut} className="band-btn">Sign out</button>
           </div>
         </div>
       </div>
