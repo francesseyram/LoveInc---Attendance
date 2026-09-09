@@ -18,6 +18,7 @@ export default {
           elevated: 'rgb(var(--surface-el) / <alpha-value>)',
           hover:    'rgb(var(--surface-hv) / <alpha-value>)',
         },
+        verdant: 'rgb(var(--verdant) / <alpha-value>)',
         brand: {
           bg:     'rgb(var(--bg) / <alpha-value>)',
           border: 'rgb(var(--border) / <alpha-value>)',
@@ -27,8 +28,10 @@ export default {
         },
       },
       fontFamily: {
-        heading: ['"Cormorant Garamond"', 'Georgia', 'serif'],
-        body:    ['"DM Sans"', 'system-ui', 'sans-serif'],
+        heading: ['Fraunces', 'Georgia', 'serif'],
+        display: ['Fraunces', 'Georgia', 'serif'],
+        body:    ['Archivo', 'system-ui', 'sans-serif'],
+        mono:    ['"DM Mono"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
         gold:    'var(--shadow-accent)',

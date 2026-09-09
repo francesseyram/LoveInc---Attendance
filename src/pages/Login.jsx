@@ -52,24 +52,24 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6">
-      <div className="w-full max-w-sm animate-slide-up">
+    <div className="min-h-screen flex items-center">
+      <div className="shell grid lg:grid-cols-2 gap-12 lg:gap-20 items-center py-16">
 
-        {/* Logo */}
-        <div className="flex flex-col items-center gap-3 mb-10">
-          <img
-            src="/global_white_png.png"
-            alt="Love Inc Global"
-            className="h-20 w-auto object-contain"
-            onError={(e) => { e.target.style.display = 'none' }}
-          />
-          <div className="text-center">
-            <h1 className="font-display text-3xl font-semibold text-gold tracking-wide">Love Inc Global</h1>
-            <p className="text-brand-subtle text-xs tracking-widest uppercase mt-1">Admin Portal</p>
-          </div>
+        {/* Left: who this is for */}
+        <div className="animate-fade-in">
+          <p className="eyebrow mb-4">Admin portal</p>
+          <h1 className="font-display text-4xl sm:text-5xl font-semibold text-brand-text leading-[1.05] mb-5">
+            Who came,<br />and who we<br />haven't seen.
+          </h1>
+          <div className="gold-divider mb-5" />
+          <p className="text-brand-muted leading-relaxed max-w-sm">
+            Attendance for Love Inc Global — services, the roll, and who's drifted.
+            Sign in to pick up where the fellowship left off.
+          </p>
         </div>
 
-        {/* Card */}
+        {/* Right: the form */}
+        <div className="w-full max-w-md lg:justify-self-end animate-slide-up">
         <div className="card">
           <h2 className="font-display text-2xl font-semibold text-brand-text mb-1">Sign in</h2>
           <p className="text-brand-muted text-sm mb-6">Admin access only. Contact your superadmin if you need access.</p>
@@ -135,9 +135,8 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-brand-subtle text-xs mt-6">
-          Love Inc Global · Est. 2022 · Ashesi University
-        </p>
+        <p className="eyebrow mt-6">Est. 2022 · Ashesi University</p>
+        </div>
       </div>
     </div>
   )

@@ -21,13 +21,15 @@ const TABS = ['Live', 'Services', 'Members', 'Stats']
 // ─── Theme-aware chart colors ─────────────────────────────────
 function useChartColors() {
   const { theme } = useTheme()
+  // Recharts can't read CSS variables, so these mirror src/styles/index.css.
+  // Keep them in sync when the palette changes.
   return {
-    bar:           theme === 'light' ? '#7C3AED' : '#C9A84C',
-    grid:          theme === 'light' ? '#DDD6FE' : '#2A2A2A',
-    axis:          theme === 'light' ? '#6B7280' : '#9CA3AF',
-    tooltipBg:     theme === 'light' ? '#FAF7FF' : '#1A1A1A',
-    tooltipBorder: theme === 'light' ? '#DDD6FE' : '#2A2A2A',
-    accent:        theme === 'light' ? '#7C3AED' : '#C9A84C',
+    bar:           theme === 'light' ? '#0E4D3C' : '#C9A84C',
+    grid:          theme === 'light' ? '#D1D9CA' : '#303629',
+    axis:          theme === 'light' ? '#5C6352' : '#9CA08F',
+    tooltipBg:     theme === 'light' ? '#F6F8F3' : '#212520',
+    tooltipBorder: theme === 'light' ? '#D1D9CA' : '#303629',
+    accent:        theme === 'light' ? '#8A6A1F' : '#4E9E7E',
   }
 }
 
@@ -213,7 +215,7 @@ export default function Admin() {
     <div className="min-h-screen" style={{ backgroundColor: 'rgb(var(--bg))' }}>
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="shell py-9">
 
         {/* Header */}
         <div className="flex items-start justify-between mb-8">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getServiceById, getActiveService } from '../firebase/services'
 import {
@@ -34,38 +34,61 @@ function MoonIcon() {
   )
 }
 
-function FloatingThemeToggle() {
+function ThemeToggle() {
   const { theme, toggleTheme } = useTheme()
   const isLight = theme === 'light'
   return (
     <button
       type="button"
       onClick={toggleTheme}
-      className="fixed top-4 right-4 z-50 w-11 h-11 rounded-full flex items-center justify-center shadow-lg border border-brand-border bg-surface-elevated text-brand-muted hover:text-gold hover:border-gold/40 transition-all duration-200"
+      className="w-9 h-9 rounded-md flex items-center justify-center border border-brand-border text-brand-muted hover:text-gold hover:border-gold/50 transition-colors"
       aria-label={isLight ? 'Switch to dark mode' : 'Switch to light mode'}
-      title={isLight ? 'Dark mode' : 'Light mode'}
     >
       {isLight ? <MoonIcon /> : <SunIcon />}
     </button>
   )
 }
 
-function Logo() {
+/** Brand bar. Left-anchored — the old centred stack made every screen feel like a login box. */
+function Masthead() {
   const { theme } = useTheme()
-  const isLight = theme === 'light'
   return (
-    <div className="flex flex-col items-center gap-3 mb-8">
-      <img
-        src={isLight ? '/global_black.png' : '/global_white_png.png'}
-        alt="Love Inc Global"
-        className="h-20 w-auto object-contain"
-        onError={(e) => { e.target.style.display = 'none' }}
-      />
-      <div className="text-center">
-        <h1 className="font-display text-3xl font-semibold text-gold tracking-wide">Love Inc Global</h1>
-        <p className="text-brand-subtle text-xs tracking-widest uppercase mt-1">Est. 2022 · Ashesi University</p>
+    <header className="border-b border-brand-border">
+      <div className="shell flex items-center justify-between py-4">
+        <div className="flex items-center gap-3">
+          <img
+            src={theme === 'light' ? '/global_black.png' : '/global_white_png.png'}
+            alt=""
+            className="h-8 w-auto object-contain"
+            onError={(e) => { e.target.style.display = 'none' }}
+          />
+          <div className="leading-none">
+            <p className="font-display text-lg font-semibold text-brand-text">Love Inc Global</p>
+            <p className="eyebrow mt-1">Ashesi · Est. 2022</p>
+          </div>
+        </div>
+        <ThemeToggle />
       </div>
-    </div>
+    </header>
+  )
+}
+
+/** Roster rows use '—' as a placeholder surname; never show that to the person. */
+function fullName(m) {
+  const last = m.lastName && m.lastName !== '—' ? m.lastName : ''
+  return `${m.firstName || ''} ${last}`.trim()
+}
+
+/** Highlight the letters the person actually typed, so the match is obvious at a glance. */
+function Highlight({ text, term }) {
+  const q = (term || '').trim()
+  if (!q) return text
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean)
+  const pattern = new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'ig')
+  return text.split(pattern).map((part, i) =>
+    words.includes(part.toLowerCase())
+      ? <mark key={i} className="bg-gold/25 text-brand-text rounded-[3px] px-0.5">{part}</mark>
+      : <span key={i}>{part}</span>,
   )
 }
 
@@ -173,33 +196,39 @@ export default function CheckIn() {
     }
   }
 
-  // ─── Search by name (primary returning path) ───────────────
-  const handleSearch = async (e) => {
-    e?.preventDefault()
-    setError('')
+  // ─── Live search ──────────────────────────────────────────
+  // Results resolve as you type. Each run carries a token so a slow earlier
+  // query can never overwrite the results of a later keystroke.
+  const searchRunRef = useRef(0)
+
+  useEffect(() => {
     const term = searchTerm.trim()
     if (term.length < 2) {
-      setError('Type at least two letters of your name.')
+      setResults(null)
+      setSearching(false)
       return
     }
 
     setSearching(true)
-    try {
-      // Someone may still type a phone number here — treat that as an exact lookup.
-      const asPhone = normalizePhoneKey(term)
-      if (asPhone) {
-        const m = await getMemberByStudentId(asPhone)
-        setResults(m ? [m] : [])
-      } else {
-        setResults(await searchMembersByName(term))
+    const run = ++searchRunRef.current
+    const timer = setTimeout(async () => {
+      try {
+        // A phone number typed here is an exact lookup, not a name search.
+        const asPhone = normalizePhoneKey(term)
+        const found = asPhone
+          ? [await getMemberByStudentId(asPhone)].filter(Boolean)
+          : await searchMembersByName(term)
+        if (run === searchRunRef.current) setResults(found)
+      } catch (err) {
+        console.error(err)
+        if (run === searchRunRef.current) setError('Search failed. Check your connection.')
+      } finally {
+        if (run === searchRunRef.current) setSearching(false)
       }
-    } catch (err) {
-      console.error(err)
-      setError('Search failed. Please try again.')
-    } finally {
-      setSearching(false)
-    }
-  }
+    }, 220)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   /** Mark one specific, confirmed person present. Never called from a bare search hit. */
   const markPresent = async (member) => {
@@ -245,269 +274,302 @@ export default function CheckIn() {
 
   // ─── Render states ─────────────────────────────────────────
 
+  const Frame = ({ children }) => (
+    <div className="min-h-screen flex flex-col">
+      <Masthead />
+      <main className="shell flex-1 py-10 sm:py-14">{children}</main>
+      <footer className="shell py-6">
+        <div className="rule mb-3" />
+        <p className="eyebrow">Love Inc Global · Attendance</p>
+      </footer>
+    </div>
+  )
+
   if (pageLoading) {
-    return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center relative">
-        <FloatingThemeToggle />
-        <Spinner />
-      </div>
-    )
+    return <Frame><div className="py-24"><Spinner /></div></Frame>
   }
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6 relative">
-        <FloatingThemeToggle />
-        <div className="text-center max-w-sm animate-fade-in">
-          <Logo />
-          <div className="card mt-4">
-            <p className="text-4xl mb-4">🔍</p>
-            <h2 className="font-display text-2xl text-brand-text mb-2">Service not found</h2>
-            <p className="text-brand-muted text-sm">
-              The check-in link appears to be invalid or the service has ended.
-              Ask your cell leader for the correct link.
-            </p>
-          </div>
+      <Frame>
+        <div className="max-w-xl animate-fade-in">
+          <p className="eyebrow mb-3">No service</p>
+          <h1 className="font-display text-4xl sm:text-5xl font-semibold text-brand-text mb-4">
+            This link isn't open for check-in.
+          </h1>
+          <p className="text-brand-muted text-base leading-relaxed">
+            The service may have ended, or the link is incomplete. Ask your cell leader
+            for today's QR code and scan it again.
+          </p>
         </div>
-      </div>
+      </Frame>
     )
   }
 
-  // Service ended (completed) — block check-in
   if (service?.isCompleted) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6 relative">
-        <FloatingThemeToggle />
-        <div className="w-full max-w-sm text-center animate-fade-in">
-          <Logo />
-          <div className="card mt-4 border-brand-border">
-            <p className="text-4xl mb-3">✓</p>
-            <h2 className="font-display text-2xl text-brand-text mb-2">This service has ended</h2>
-            <p className="text-brand-muted text-sm">
-              Check-in is closed for <span className="text-brand-text font-medium">{service.name}</span>.
-            </p>
-          </div>
+      <Frame>
+        <div className="max-w-xl animate-fade-in">
+          <p className="eyebrow mb-3">Closed</p>
+          <h1 className="font-display text-4xl sm:text-5xl font-semibold text-brand-text mb-4">
+            {service.name} has ended.
+          </h1>
+          <p className="text-brand-muted text-base leading-relaxed">
+            Check-in for this service is closed. See you at the next one.
+          </p>
         </div>
-      </div>
+      </Frame>
     )
   }
 
+  // ── The signature moment: the fellowship says your name back to you. ──
   if (step === 'success' && successData) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6 relative">
-        <FloatingThemeToggle />
-        <div className="w-full max-w-sm text-center animate-slide-up">
-          <Logo />
-          <div className="card border-gold/30 bg-gold/5 shadow-gold">
-            <div className="text-5xl mb-4">{successData.isNew ? '🎉' : '✅'}</div>
-            <h2 className="font-display text-3xl font-semibold text-gold mb-2">
-              {successData.isNew ? 'Welcome!' : 'Checked In!'}
-            </h2>
-            <p className="text-brand-text text-lg font-medium mb-1">{successData.name}</p>
-            <p className="text-brand-muted text-sm mb-4">
-              {successData.isNew
-                ? 'So glad you joined us for the first time! You\'re now officially part of the family.'
-                : `Welcome back! Checked in at ${successData.time}`
-              }
-            </p>
-          </div>
-          {kioskMode && (
-            <button type="button" onClick={resetToStart} className="btn-gold w-full mt-5 py-3">
-              Next person
-            </button>
-          )}
-          <p className="text-brand-subtle text-xs mt-6">
-            Love Inc Global · {service?.name}
-            {kioskMode && <span className="block mt-1">Returning to search…</span>}
+      <Frame>
+        <div className="max-w-3xl">
+          <p className="eyebrow mb-4 animate-fade-in">
+            {successData.isNew ? 'Welcome to Love Inc' : 'Checked in'}
           </p>
+          <h1 className="font-display font-semibold text-brand-text leading-[0.95] animate-name
+                         text-[clamp(2.75rem,11vw,6.5rem)]">
+            {successData.name}
+          </h1>
+          <div className="gold-divider my-7 animate-fade-in delay-100" />
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 animate-fade-in delay-200">
+            <div>
+              <p className="eyebrow mb-1">Service</p>
+              <p className="text-brand-text text-sm">{service?.name}</p>
+            </div>
+            <div>
+              <p className="eyebrow mb-1">Time</p>
+              <p className="text-brand-text text-sm tabular">{successData.time}</p>
+            </div>
+            <div>
+              <p className="eyebrow mb-1">Status</p>
+              <p className="badge-green">Present</p>
+            </div>
+          </div>
+
+          <p className="text-brand-muted text-base mt-8 max-w-md leading-relaxed">
+            {successData.isNew
+              ? "You're on the roll now. Next time, just search your name."
+              : 'Good to see you again. Head on in.'}
+          </p>
+
+          <div className="mt-8 flex items-center gap-3">
+            <button type="button" onClick={resetToStart} className="btn-gold">
+              Check in someone else
+            </button>
+            {kioskMode && <span className="eyebrow">Clearing automatically…</span>}
+          </div>
         </div>
-      </div>
+      </Frame>
     )
   }
 
+  const showResults = searchTerm.trim().length >= 2
+
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center p-6 relative">
-      <FloatingThemeToggle />
-      <div className="w-full max-w-sm">
-        <div className="animate-fade-in">
-          <Logo />
-        </div>
+    <Frame>
+      <div className="grid lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-10 lg:gap-16 items-start">
 
-        <div className="card mb-6 text-center animate-slide-up delay-100">
-          <p className="text-brand-subtle text-xs uppercase tracking-widest mb-1">{service?.type}</p>
-          <h2 className="font-display text-2xl font-semibold text-brand-text">{service?.name}</h2>
-          <p className="text-brand-muted text-sm mt-1">
-            {service?.date}
-            {service?.time && ` · ${service.time}`}
-          </p>
-        </div>
-
-        {step === 'choose' && (
-          <div className="space-y-3 animate-slide-up delay-200">
-            <p className="text-center text-brand-muted text-sm mb-4">Mark yourself present</p>
-            <button
-              type="button"
-              onClick={() => { setStep('search'); setError('') }}
-              className="w-full btn-gold py-4 text-base"
-            >
-              Find my name
-            </button>
-            <button
-              type="button"
-              onClick={() => { setStep('first'); setError('') }}
-              className="w-full btn-ghost py-4 text-base"
-            >
-              I'm new here
-            </button>
-          </div>
-        )}
-
-        {step === 'first' && (
-          <div className="card animate-slide-up">
-            <h3 className="font-display text-xl font-semibold text-brand-text mb-1">Welcome!</h3>
-            <p className="text-brand-muted text-sm mb-5">Tell us a little about yourself.</p>
-
-            <form onSubmit={handleFirstTimerSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">First Name *</label>
-                  <input type="text" className="input" placeholder="Kwame" value={firstForm.firstName} onChange={setFF('firstName')} />
-                </div>
-                <div>
-                  <label className="label">Last Name *</label>
-                  <input type="text" className="input" placeholder="Mensah" value={firstForm.lastName} onChange={setFF('lastName')} />
-                </div>
-              </div>
+        {/* ── Left rail: what you're checking into ── */}
+        <aside className="animate-fade-in lg:sticky lg:top-14">
+          <p className="eyebrow mb-3">{service?.type || 'Service'}</p>
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-brand-text leading-tight">
+            {service?.name}
+          </h1>
+          <div className="gold-divider mt-5 mb-5" />
+          <dl className="space-y-3">
+            <div>
+              <dt className="eyebrow mb-0.5">Date</dt>
+              <dd className="text-brand-text text-sm tabular">{service?.date || '—'}</dd>
+            </div>
+            {service?.time && (
               <div>
-                <label className="label">Phone Number *</label>
-                <input type="tel" className="input" placeholder="0XX XXX XXXX" value={firstForm.phone} onChange={setFF('phone')} />
-                <p className="text-brand-subtle text-xs mt-1">This is how you'll check in next time.</p>
+                <dt className="eyebrow mb-0.5">Starts</dt>
+                <dd className="text-brand-text text-sm tabular">{service.time}</dd>
               </div>
-              <div>
-                <label className="label">Email</label>
-                <input type="email" className="input" placeholder="you@ashesi.edu.gh" value={firstForm.email} onChange={setFF('email')} />
+            )}
+          </dl>
+          {kioskMode && (
+            <p className="badge-gold mt-6">Door mode</p>
+          )}
+        </aside>
+
+        {/* ── Right: the actual job ── */}
+        <section className="min-w-0">
+          {step === 'choose' && (
+            <div className="animate-slide-up max-w-xl">
+              <h2 className="font-display text-2xl font-semibold text-brand-text mb-2">Mark yourself present</h2>
+              <p className="text-brand-muted mb-7 leading-relaxed">
+                Search your name to check in. If you've never been before, register first —
+                it takes about twenty seconds.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button type="button" onClick={() => { setStep('search'); setError('') }} className="btn-gold px-6 py-3">
+                  Find my name
+                </button>
+                <button type="button" onClick={() => { setStep('first'); setError('') }} className="btn-ghost px-6 py-3">
+                  I'm new here
+                </button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Class</label>
-                  <select className="input" value={firstForm.cohort} onChange={setFF('cohort')}>
-                    <option value="">Select…</option>
-                    {CLASS_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Hostel</label>
-                  <input type="text" className="input" placeholder="e.g. Dufie" value={firstForm.hostel} onChange={setFF('hostel')} />
-                </div>
+            </div>
+          )}
+
+          {step === 'search' && (
+            <div className="animate-slide-up max-w-xl">
+              <h2 className="font-display text-2xl font-semibold text-brand-text mb-2">Find your name</h2>
+              <p className="text-brand-muted mb-6 leading-relaxed">
+                Start typing — matches appear as you go. Tap yourself to check in.
+              </p>
+
+              <label className="label" htmlFor="name-search">Your name</label>
+              <div className="relative">
+                <input
+                  id="name-search"
+                  type="text"
+                  className="input pr-11 text-lg"
+                  placeholder="Start typing…"
+                  value={searchTerm}
+                  onChange={e => { setSearchTerm(e.target.value); setError('') }}
+                  autoFocus
+                  autoComplete="off"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2">
+                  {searching
+                    ? <span className="block w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+                    : <svg className="w-4 h-4 text-brand-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="M20 20l-3.5-3.5" />
+                      </svg>}
+                </span>
               </div>
-              <div>
-                <label className="label">Birthday</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <select className="input" value={firstForm.birthMonth} onChange={setFF('birthMonth')}>
-                    <option value="">Month</option>
-                    {MONTH_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                  <select className="input" value={firstForm.birthDay} onChange={setFF('birthDay')}>
-                    <option value="">Day</option>
-                    {DAY_OPTIONS.map(d => <option key={d} value={d}>{Number(d)}</option>)}
-                  </select>
-                </div>
-                <p className="text-brand-subtle text-xs mt-1">Day and month only — we don't ask for the year.</p>
-              </div>
+              <p className="text-brand-subtle text-xs mt-2">A phone number works too.</p>
 
               {error && (
-                <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-4 py-2">{error}</p>
+                <p className="badge-red mt-4 !block !rounded-md px-3 py-2">{error}</p>
               )}
 
-              <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => { setStep('choose'); setError('') }} className="btn-ghost flex-1">
-                  Back
-                </button>
-                <button type="submit" disabled={submitting} className="btn-gold flex-1">
-                  {submitting ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                      Checking in…
-                    </span>
-                  ) : 'Check In'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {step === 'search' && (
-          <div className="card animate-slide-up">
-            <h3 className="font-display text-xl font-semibold text-brand-text mb-1">Find your name</h3>
-            <p className="text-brand-muted text-sm mb-5">Search your name, then tap yourself in the list.</p>
-
-            <form onSubmit={handleSearch} className="space-y-4">
-              <div>
-                <label className="label">Your Name</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="e.g. Kwame Mensah"
-                    value={searchTerm}
-                    onChange={e => { setSearchTerm(e.target.value); setResults(null); setError('') }}
-                    autoFocus
-                  />
-                  <button type="submit" disabled={searching} className="btn-gold px-5 shrink-0">
-                    {searching ? '…' : 'Search'}
-                  </button>
-                </div>
-                <p className="text-brand-subtle text-xs mt-1">You can also type your phone number.</p>
-              </div>
-            </form>
-
-            {error && (
-              <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-4 py-2 mt-4">{error}</p>
-            )}
-
-            {results !== null && !searching && (
-              <div className="mt-5">
-                {results.length === 0 ? (
-                  <div className="text-center py-6">
-                    <p className="text-brand-muted text-sm mb-1">No one found for "{searchTerm}".</p>
-                    <p className="text-brand-subtle text-xs mb-4">Check the spelling, or register as a new member.</p>
-                    <button type="button" onClick={() => { setStep('first'); setError('') }} className="btn-gold px-6">
-                      I'm new here
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <p className="label mb-2">
-                      {results.length === 1 ? 'Is this you?' : `${results.length} matches — tap yourself`}
-                    </p>
-                    <div className="space-y-2 max-h-72 overflow-y-auto">
-                      {results.map(m => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          disabled={submitting}
-                          onClick={() => markPresent(m)}
-                          className="w-full text-left px-4 py-3 rounded-lg border border-brand-border bg-surface-elevated hover:border-gold/40 hover:bg-surface-hover transition-all disabled:opacity-50"
-                        >
-                          <p className="text-brand-text font-medium text-sm">{m.firstName} {m.lastName}</p>
-                          <p className="text-brand-subtle text-xs mt-0.5">
-                            {[m.cohort, maskPhone(m.studentId), m.hostel].filter(Boolean).join(' · ') || 'No other details'}
-                          </p>
-                        </button>
-                      ))}
+              {showResults && results !== null && (
+                <div className="mt-7">
+                  {results.length === 0 ? (
+                    <div className="card">
+                      <p className="text-brand-text text-sm mb-1">No one matches "{searchTerm.trim()}".</p>
+                      <p className="text-brand-muted text-sm mb-5">
+                        Try your surname, or a different spelling. First time here?
+                      </p>
+                      <button type="button" onClick={() => { setStep('first'); setError('') }} className="btn-gold">
+                        Register instead
+                      </button>
                     </div>
-                  </>
-                )}
-              </div>
-            )}
+                  ) : (
+                    <>
+                      <p className="eyebrow mb-3">
+                        {results.length} {results.length === 1 ? 'match' : 'matches'}
+                      </p>
+                      <ul className="space-y-2">
+                        {results.map((m, i) => (
+                          <li key={m.id} className="animate-rise" style={{ animationDelay: `${Math.min(i, 8) * 28}ms` }}>
+                            <button
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => markPresent(m)}
+                              className="group w-full text-left px-4 py-3.5 rounded-md border border-brand-border bg-surface
+                                         hover:border-gold/60 hover:bg-surface-hover transition-all disabled:opacity-50
+                                         flex items-center justify-between gap-4"
+                            >
+                              <span className="min-w-0">
+                                <span className="block text-brand-text font-medium truncate">
+                                  <Highlight text={fullName(m)} term={searchTerm} />
+                                </span>
+                                <span className="block text-brand-subtle text-xs mt-0.5 tabular truncate">
+                                  {[m.cohort, maskPhone(m.studentId), m.hostel].filter(Boolean).join('  ·  ') || 'No details on file'}
+                                </span>
+                              </span>
+                              <span className="eyebrow shrink-0 text-gold opacity-0 group-hover:opacity-100 transition-opacity">
+                                That's me →
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
 
-            <div className="flex gap-3 mt-5">
-              <button type="button" onClick={resetToStart} className="btn-ghost flex-1">Back</button>
+              <button type="button" onClick={resetToStart} className="btn-ghost mt-7">Back</button>
             </div>
-          </div>
-        )}
+          )}
 
+          {step === 'first' && (
+            <div className="animate-slide-up max-w-2xl">
+              <h2 className="font-display text-2xl font-semibold text-brand-text mb-2">Welcome — tell us who you are</h2>
+              <p className="text-brand-muted mb-7 leading-relaxed">
+                Only your name and phone number are required. Everything else helps us
+                keep in touch.
+              </p>
+              <form onSubmit={handleFirstTimerSubmit} className="space-y-5">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">First name *</label>
+                    <input type="text" className="input" placeholder="Kwame" value={firstForm.firstName} onChange={setFF('firstName')} />
+                  </div>
+                  <div>
+                    <label className="label">Last name *</label>
+                    <input type="text" className="input" placeholder="Mensah" value={firstForm.lastName} onChange={setFF('lastName')} />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Phone number *</label>
+                  <input type="tel" className="input tabular" placeholder="0XX XXX XXXX" value={firstForm.phone} onChange={setFF('phone')} />
+                  <p className="text-brand-subtle text-xs mt-1.5">This is how you'll check in next time.</p>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Class</label>
+                    <select className="input" value={firstForm.cohort} onChange={setFF('cohort')}>
+                      <option value="">Select…</option>
+                      {CLASS_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Hostel</label>
+                    <input type="text" className="input" placeholder="e.g. Dufie" value={firstForm.hostel} onChange={setFF('hostel')} />
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Email</label>
+                  <input type="email" className="input" placeholder="you@ashesi.edu.gh" value={firstForm.email} onChange={setFF('email')} />
+                </div>
+                <div>
+                  <label className="label">Birthday</label>
+                  <div className="grid grid-cols-2 gap-4 max-w-sm">
+                    <select className="input" value={firstForm.birthMonth} onChange={setFF('birthMonth')}>
+                      <option value="">Month</option>
+                      {MONTH_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    <select className="input" value={firstForm.birthDay} onChange={setFF('birthDay')}>
+                      <option value="">Day</option>
+                      {DAY_OPTIONS.map(d => <option key={d} value={d}>{Number(d)}</option>)}
+                    </select>
+                  </div>
+                  <p className="text-brand-subtle text-xs mt-1.5">Day and month only — we don't ask for the year.</p>
+                </div>
+
+                {error && <p className="badge-red !block !rounded-md px-3 py-2">{error}</p>}
+
+                <div className="flex gap-3 pt-1">
+                  <button type="submit" disabled={submitting} className="btn-gold px-6 py-3">
+                    {submitting ? 'Checking in…' : 'Register and check in'}
+                  </button>
+                  <button type="button" onClick={resetToStart} className="btn-ghost px-6 py-3">Back</button>
+                </div>
+              </form>
+            </div>
+          )}
+        </section>
       </div>
-    </div>
+    </Frame>
   )
 }
