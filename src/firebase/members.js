@@ -279,6 +279,87 @@ export async function updateMemberRole(memberId, role) {
   await updateDoc(doc(db, MEMBERS, memberId), { role })
 }
 
+/**
+ * Validates the member detail form. Returns `null` if valid, or a user-facing error string.
+ * Phone uniqueness is checked separately with `phoneTakenByOther` (needs a read).
+ */
+export function validateMemberDetails(data, { isStaffRecord = false } = {}) {
+  if (!data.firstName?.trim()) return 'First name is required.'
+  if (!data.lastName?.trim())  return 'Last name is required.'
+
+  // Staff rows keep their `auth-{uid}` key and have no phone to validate.
+  if (!isStaffRecord) {
+    if (!data.phone?.trim()) return 'Phone number is required — it is how members check in.'
+    if (!normalizePhoneKey(data.phone)) {
+      return "That phone number doesn't look right. Use the format 0XX XXX XXXX."
+    }
+  }
+
+  const email = data.email?.trim()
+  if (email && !/^\S+@\S+\.\S+$/.test(email)) return 'Enter a valid email address, or leave it blank.'
+
+  return null
+}
+
+/** True if a *different* member already holds this phone key. */
+export async function phoneTakenByOther(phone, memberId) {
+  const key = normalizePhoneKey(phone)
+  if (!key) return false
+  const existing = await getMemberByStudentId(key)
+  return !!existing && existing.id !== memberId
+}
+
+/** Fields that appear in `searchIndex/members` — a change to any of them makes the index stale. */
+function indexedFieldsChanged(before, after) {
+  return ['firstName', 'lastName', 'cohort', 'hostel', 'studentId']
+    .some(f => (before?.[f] || '') !== (after?.[f] || ''))
+}
+
+/**
+ * Update a member's editable details (name, phone, contact info, cohort/hostel).
+ * `role` is deliberately excluded — use `updateMemberRole` for that.
+ *
+ * `studentId` is the canonical phone key the check-in page looks people up by,
+ * so it is kept in step with `phone` here exactly as `createMember` does. Staff
+ * rows keep their `auth-{uid}` key, which is what links them to their sign-in.
+ *
+ * Returns the normalised fields that were written, so callers can update local state.
+ */
+export async function updateMember(memberId, data, current = null) {
+  const before   = current || await getMemberById(memberId)
+  const isStaff  = isStaffAccountStudentId(before?.studentId)
+  const phoneKey = normalizePhoneKey(data.phone)
+
+  const fields = {
+    firstName:  data.firstName.trim(),
+    lastName:   data.lastName.trim(),
+    email:      (data.email?.trim() || '').toLowerCase(),
+    birthday:   data.birthday || '',
+    // `formatBirthday` reads birthdayMD first, so it has to move with birthday
+    // or the profile keeps showing the old date after a save.
+    birthdayMD: data.birthday ? data.birthday.slice(5) : (data.birthdayMD || ''),
+    cohort:     data.cohort?.trim() || '',
+    hostel:     data.hostel?.trim() || '',
+  }
+  if (isStaff) {
+    fields.phone     = data.phone?.trim() || ''
+    fields.studentId = before.studentId          // never re-key a login account
+  } else {
+    fields.phone     = phoneKey
+    fields.studentId = phoneKey
+  }
+
+  await updateDoc(doc(db, MEMBERS, memberId), { ...fields, updatedAt: serverTimestamp() })
+
+  // The index is an append-only array, so an edit leaves a stale entry behind.
+  // Rebuilding costs one full read, which is fine for an occasional admin edit.
+  if (indexedFieldsChanged(before, fields)) {
+    try { await rebuildSearchIndex() } catch { invalidateMemberSearchCache() }
+  }
+
+  return fields
+}
+
 /** Get all members, ordered by join date (newest first). */
 export async function getAllMembers() {
   const q = query(collection(db, MEMBERS), orderBy('joinedDate', 'desc'))

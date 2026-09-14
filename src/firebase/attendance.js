@@ -2,7 +2,7 @@ import {
   collection,
   doc,
   runTransaction,
-  addDoc,
+  deleteDoc,
   getDocs,
   query,
   where,
@@ -54,6 +54,15 @@ export async function checkIn(memberId, serviceId, isNew = false) {
     return false
   })
   return { id: ref.id, alreadyCheckedIn }
+}
+
+/**
+ * Remove a check-in — used when the wrong person was marked present.
+ * Deleting the record is what makes them count as absent again: every
+ * attendance total in the app is derived from these documents.
+ */
+export async function deleteAttendance(recordId) {
+  await deleteDoc(doc(db, ATTENDANCE, recordId))
 }
 
 /**

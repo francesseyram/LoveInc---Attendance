@@ -23,6 +23,14 @@ Thumbs.db
 *.swp
 *.swo
 
+# AI assistant local files — never commit, never attribute
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+.claude.json
+.claude.json.backup
+.mcp.json
+
 # Logs & package manager debug
 *.log
 npm-debug.log*

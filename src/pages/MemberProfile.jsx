@@ -4,14 +4,18 @@ import Navbar from '../components/Navbar'
 import { useAuth } from '../App'
 import {
   getMemberById,
+  updateMember,
   updateMemberRole,
   formatStudentIdForDisplay,
+  isStaffAccountStudentId,
+  validateMemberDetails,
   validateRoleAssignment,
   formatBirthday,
+  phoneTakenByOther,
   ROLES_ASSIGNABLE_BY_ADMIN,
   ROLES_ASSIGNABLE_BY_SUPERADMIN,
 } from '../firebase/members'
-import { getAttendanceForMember }           from '../firebase/attendance'
+import { getAttendanceForMember, deleteAttendance } from '../firebase/attendance'
 import { getServiceById }                   from '../firebase/services'
 
 function roleOptionLabel(r) {
@@ -52,6 +56,17 @@ export default function MemberProfile() {
   const [error,     setError]     = useState('')
   const [roleError, setRoleError] = useState('')
 
+  // Member detail editing
+  const [editing,       setEditing]       = useState(false)
+  const [form,          setForm]          = useState(null)
+  const [savingDetails, setSavingDetails] = useState(false)
+  const [detailsError,  setDetailsError]  = useState('')
+  const [detailsSaved,  setDetailsSaved]  = useState(false)
+
+  // Undoing a check-in
+  const [absentConfirmId, setAbsentConfirmId] = useState(null)
+  const [absentBusyId,    setAbsentBusyId]    = useState(null)
+
   useEffect(() => {
     const load = async () => {
       setLoading(true)
@@ -84,6 +99,68 @@ export default function MemberProfile() {
     load()
   }, [id])
 
+  const startEdit = () => {
+    setForm({
+      firstName:  member.firstName  || '',
+      lastName:   member.lastName   || '',
+      phone:      member.phone || member.studentId || '',
+      email:      member.email      || '',
+      birthday:   member.birthday   || '',
+      // Carried through untouched so a roster birthday with no year survives a save.
+      birthdayMD: member.birthdayMD || '',
+      cohort:     member.cohort     || '',
+      hostel:     member.hostel     || '',
+    })
+    setDetailsError('')
+    setDetailsSaved(false)
+    setEditing(true)
+  }
+
+  const setField = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }))
+
+  const handleSaveDetails = async (e) => {
+    e.preventDefault()
+    setDetailsError('')
+
+    const invalid = validateMemberDetails(form, { isStaffRecord })
+    if (invalid) { setDetailsError(invalid); return }
+
+    setSavingDetails(true)
+    try {
+      // Phone is the key returning members check in with, so it has to stay unique.
+      if (!isStaffRecord && await phoneTakenByOther(form.phone, id)) {
+        setDetailsError('Another member is already registered with that phone number.')
+        return
+      }
+
+      const saved = await updateMember(id, form, member)
+      setMember(m => ({ ...m, ...saved }))
+      setEditing(false)
+      setDetailsSaved(true)
+      setTimeout(() => setDetailsSaved(false), 2500)
+    } catch (err) {
+      console.error(err)
+      setDetailsError('Could not save changes. Try again.')
+    } finally {
+      setSavingDetails(false)
+    }
+  }
+
+  // Undo a check-in that was logged against the wrong person.
+  const handleMarkAbsent = async (recordId) => {
+    setAbsentBusyId(recordId)
+    try {
+      await deleteAttendance(recordId)
+      setHistory(h => h.filter(entry => entry.attendance.id !== recordId))
+    } catch (err) {
+      console.error(err)
+      setError('Could not remove that check-in. Try again.')
+    } finally {
+      setAbsentBusyId(null)
+      setAbsentConfirmId(null)
+    }
+  }
+
   const handleRoleUpdate = async () => {
     if (!member || newRole === member.role) return
     setRoleError('')
@@ -108,6 +185,9 @@ export default function MemberProfile() {
 
   // Super Admins can change anyone; regular Admins only Member ↔ Leader for non-Admin accounts (Leaders cannot assign roles)
   const actorCanManageRoles = memberRole === 'superadmin' || memberRole === 'admin'
+  // Editing details and undoing check-ins are open to any Admin or Super Admin.
+  const canManageMembers    = actorCanManageRoles
+  const isStaffRecord       = isStaffAccountStudentId(member?.studentId)
   const canEditThisMemberRole =
     actorCanManageRoles &&
     (memberRole === 'superadmin' || (member && ['member', 'leader'].includes(member.role)))
@@ -124,10 +204,6 @@ export default function MemberProfile() {
     const allowed = memberRole === 'superadmin' ? ROLES_ASSIGNABLE_BY_SUPERADMIN : ROLES_ASSIGNABLE_BY_ADMIN
     if (!allowed.includes(newRole)) setNewRole(member.role)
   }, [member, memberRole, newRole])
-
-  const attendanceRate = history.length > 0
-    ? `${Math.round((history.length / Math.max(history.length, 1)) * 100)}%`
-    : '0%'
 
   // ─── Render ──────────────────────────────────────────────────
   return (
@@ -191,23 +267,118 @@ export default function MemberProfile() {
 
               {/* Left: Details */}
               <div className="lg:col-span-2 space-y-4">
-                {/* Contact info */}
+                {/* Member details */}
                 <div className="card">
-                  <h2 className="font-display text-xl font-semibold text-brand-text mb-4">Contact Information</h2>
-                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                    {[
-                      { label: 'Email',    value: member.email    || '—' },
-                      { label: 'Phone',    value: formatStudentIdForDisplay(member.phone || member.studentId) },
-                      { label: 'Birthday', value: formatBirthday(member) },
-                      { label: 'Cohort',   value: member.cohort   || '—' },
-                      { label: 'Hostel',   value: member.hostel   || '—' },
-                    ].map(({ label, value }) => (
-                      <div key={label}>
-                        <dt className="label mb-1">{label}</dt>
-                        <dd className="text-brand-text">{value}</dd>
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <h2 className="font-display text-xl font-semibold text-brand-text">Member Details</h2>
+                    <div className="flex items-center gap-3">
+                      {detailsSaved && <span className="text-green-500 text-xs font-medium">✓ Saved</span>}
+                      {canManageMembers && !editing && (
+                        <button type="button" onClick={startEdit} className="btn-ghost text-xs py-1.5 px-3">
+                          Edit details
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {!editing ? (
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                      {[
+                        { label: 'Email',    value: member.email    || '—' },
+                        { label: 'Phone',    value: formatStudentIdForDisplay(member.phone || member.studentId) },
+                        { label: 'Birthday', value: formatBirthday(member) },
+                        { label: 'Cohort',   value: member.cohort   || '—' },
+                        { label: 'Hostel',   value: member.hostel   || '—' },
+                      ].map(({ label, value }) => (
+                        <div key={label}>
+                          <dt className="label mb-1">{label}</dt>
+                          <dd className="text-brand-text break-words">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    <form onSubmit={handleSaveDetails} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="label">First Name *</label>
+                          <input type="text" className="input" value={form.firstName} onChange={setField('firstName')} />
+                        </div>
+                        <div>
+                          <label className="label">Last Name *</label>
+                          <input type="text" className="input" value={form.lastName} onChange={setField('lastName')} />
+                        </div>
                       </div>
-                    ))}
-                  </dl>
+
+                      <div>
+                        <label className="label">Phone Number {isStaffRecord ? '' : '*'}</label>
+                        <input
+                          type="tel"
+                          className="input tabular disabled:opacity-60 disabled:cursor-not-allowed"
+                          placeholder="0XX XXX XXXX"
+                          value={form.phone}
+                          onChange={setField('phone')}
+                          disabled={isStaffRecord}
+                        />
+                        <p className="text-brand-subtle text-xs mt-1.5">
+                          {isStaffRecord
+                            ? 'Login accounts keep their generated key — it links this profile to their sign-in.'
+                            : 'This is how they check in, so it has to stay unique. Stored as +233…'}
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="label">Cohort</label>
+                          <input type="text" className="input" placeholder="e.g. 2027" value={form.cohort} onChange={setField('cohort')} />
+                        </div>
+                        <div>
+                          <label className="label">Hostel</label>
+                          <input type="text" className="input" value={form.hostel} onChange={setField('hostel')} />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="label">Email</label>
+                          <input type="email" className="input" placeholder="you@ashesi.edu.gh" value={form.email} onChange={setField('email')} />
+                        </div>
+                        <div>
+                          <label className="label">Birthday</label>
+                          <input type="date" className="input" value={form.birthday} onChange={setField('birthday')} />
+                          {!form.birthday && form.birthdayMD && (
+                            <p className="text-brand-subtle text-xs mt-1.5">
+                              On file as {formatBirthday(member)} — no year was recorded. Leave blank to keep it.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {isStaffRecord && (
+                        <p className="text-brand-subtle text-xs">
+                          Changing the email here doesn&apos;t change their sign-in email — update that in the Firebase console.
+                        </p>
+                      )}
+
+                      {detailsError && (
+                        <p className="text-red-400 text-sm bg-red-900/20 border border-red-800 rounded-lg px-4 py-2.5">
+                          {detailsError}
+                        </p>
+                      )}
+
+                      <div className="flex gap-3 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => { setEditing(false); setDetailsError('') }}
+                          className="btn-ghost flex-1"
+                        >
+                          Cancel
+                        </button>
+                        <button type="submit" disabled={savingDetails} className="btn-gold flex-1">
+                          {savingDetails ? 'Saving…' : 'Save changes'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
 
                 {/* Attendance History */}
@@ -222,14 +393,44 @@ export default function MemberProfile() {
                   ) : (
                     <div className="space-y-2">
                       {history.map(({ attendance: a, service: s }) => (
-                        <div key={a.id} className="flex items-center justify-between py-3 border-b border-brand-border last:border-0">
-                          <div>
+                        <div key={a.id} className="flex items-center justify-between gap-3 py-3 border-b border-brand-border last:border-0">
+                          <div className="min-w-0">
                             <p className="text-brand-text text-sm font-medium">{s?.name || 'Unknown Service'}</p>
                             <p className="text-brand-subtle text-xs">{s?.type} · {formatDateTime(a.checkedInAt)}</p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             {a.isNew && <span className="badge-gold">First Timer</span>}
                             <span className="badge-green">Present</span>
+                            {canManageMembers && (
+                              absentConfirmId === a.id ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setAbsentConfirmId(null)}
+                                    className="text-brand-muted hover:text-brand-text text-xs transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkAbsent(a.id)}
+                                    disabled={absentBusyId === a.id}
+                                    className="text-xs py-1 px-2.5 rounded-lg bg-red-700 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-60"
+                                  >
+                                    {absentBusyId === a.id ? 'Removing…' : 'Confirm'}
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setAbsentConfirmId(a.id)}
+                                  className="text-xs text-red-400/90 hover:text-red-300 font-medium transition-colors"
+                                  title="Undo this check-in"
+                                >
+                                  Mark absent
+                                </button>
+                              )
+                            )}
                           </div>
                         </div>
                       ))}

@@ -16,12 +16,26 @@ function formatTime(ts) {
 /**
  * 
  * Props:
- *   records   - array of attendance objects (already joined with member data)
- *               each: { id, memberId, firstName, lastName, studentId, role, checkedInAt, isNew }
- *   loading   - boolean
+ *   records      - array of attendance objects (already joined with member data)
+ *                  each: { id, memberId, firstName, lastName, studentId, role, checkedInAt, isNew }
+ *   loading      - boolean
+ *   canEdit      - if true, admins can undo a check-in
+ *   onMarkAbsent - async callback(record) that removes the check-in
  */
-export default function AttendanceTable({ records = [], loading = false }) {
-  const [search, setSearch] = useState('')
+export default function AttendanceTable({ records = [], loading = false, canEdit = false, onMarkAbsent }) {
+  const [search,    setSearch]    = useState('')
+  const [confirmId, setConfirmId] = useState(null)
+  const [busyId,    setBusyId]    = useState(null)
+
+  const handleMarkAbsent = async (record) => {
+    setBusyId(record.id)
+    try {
+      await onMarkAbsent?.(record)
+    } finally {
+      setBusyId(null)
+      setConfirmId(null)
+    }
+  }
 
   const filtered = records.filter(r => {
     const term = search.toLowerCase()
@@ -78,6 +92,7 @@ export default function AttendanceTable({ records = [], loading = false }) {
                 <th>Role</th>
                 <th>Check-In Time</th>
                 <th>Status</th>
+                {canEdit && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -110,6 +125,38 @@ export default function AttendanceTable({ records = [], loading = false }) {
                       <span className="badge-green">Present</span>
                     )}
                   </td>
+                  {canEdit && (
+                    <td className="text-right whitespace-nowrap">
+                      {confirmId === r.id ? (
+                        <span className="inline-flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmId(null)}
+                            className="text-brand-muted hover:text-brand-text text-xs transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMarkAbsent(r)}
+                            disabled={busyId === r.id}
+                            className="text-xs py-1 px-2.5 rounded-lg bg-red-700 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-60"
+                          >
+                            {busyId === r.id ? 'Removing…' : 'Confirm'}
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmId(r.id)}
+                          className="text-xs text-red-400/90 hover:text-red-300 font-medium transition-colors"
+                          title="Undo this check-in"
+                        >
+                          Mark absent
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

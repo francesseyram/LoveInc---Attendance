@@ -13,7 +13,7 @@ import FlierModal        from '../components/FlierModal'
 import AppSettings       from '../components/AppSettings'
 
 import { useAuth, useTheme } from '../App'
-import { subscribeToServiceAttendance, getAttendanceForService } from '../firebase/attendance'
+import { subscribeToServiceAttendance, getAttendanceForService, deleteAttendance } from '../firebase/attendance'
 import { getAllServices, getActiveService, setActiveService, completeService, deleteService } from '../firebase/services'
 import { getAllMembers, getMemberById }                           from '../firebase/members'
 import { getAllAttendance, buildAnalytics }                        from '../firebase/analytics'
@@ -93,6 +93,7 @@ function CustomTooltip({ active, payload, label, colors }) {
 export default function Admin() {
   const { memberRole, user } = useAuth()
   const isSuperAdmin    = memberRole === 'superadmin'
+  const isAdmin         = memberRole === 'admin' || isSuperAdmin
   const chartColors     = useChartColors()
 
   const [tab,             setTab]             = useState('Live')
@@ -210,6 +211,13 @@ export default function Admin() {
     loadServices()
   }
 
+  // Undo a mistaken check-in. The live subscription drops the row on its own;
+  // reloading services keeps the per-service counts in sync.
+  const handleMarkAbsent = async (record) => {
+    await deleteAttendance(record.id)
+    loadServices()
+  }
+
   const handleServiceCreated = (newServiceId) => {
     setShowNewSvc(false)
     loadServices().then(() => {
@@ -274,7 +282,12 @@ export default function Admin() {
                   <StatsCard label="First Timers Today" value={liveFirstTimers} icon="" />
                   <StatsCard label="Attendance Rate"    value={attendanceRate} />
                 </div>
-                <AttendanceTable records={liveRecords} loading={liveLoading} />
+                <AttendanceTable
+                  records={liveRecords}
+                  loading={liveLoading}
+                  canEdit={isAdmin}
+                  onMarkAbsent={handleMarkAbsent}
+                />
               </>
             )}
           </div>
